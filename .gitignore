@@ -1,0 +1,10 @@
+# Runtime data
+data/
+logs/
+run/
+
+# Secrets and credentials
+secrets/
+
+# Source repos (cloned by the script)
+src/
