@@ -18,15 +18,15 @@ SRC_DIR="${SRC_DIR:-$WORKDIR/src}"
 JWT_SECRET_PATH="${JWT_SECRET_PATH:-$SECRETS_DIR/jwt.hex}"
 
 ETHREX_GIT_URL="${ETHREX_GIT_URL:-https://github.com/lambdaclass/ethrex.git}"
-LIGHTHOUSE_GIT_URL="${LIGHTHOUSE_GIT_URL:-https://github.com/sigp/lighthouse.git}"
+PRYSM_GIT_URL="${PRYSM_GIT_URL:-https://github.com/OffchainLabs/prysm.git}"
 ETHREX_REF="${ETHREX_REF:-glamsterdam-devnet-4}"
-LIGHTHOUSE_REF="${LIGHTHOUSE_REF:-glamsterdam-devnet-4}"
+PRYSM_REF="${PRYSM_REF:-glamsterdam-devnet-4}"
 
 ETHREX_SRC="${ETHREX_SRC:-$SRC_DIR/ethrex}"
-LIGHTHOUSE_SRC="${LIGHTHOUSE_SRC:-$SRC_DIR/lighthouse}"
+PRYSM_SRC="${PRYSM_SRC:-$SRC_DIR/prysm}"
 
 ETHREX_BIN="${ETHREX_BIN:-}"
-LIGHTHOUSE_BIN="${LIGHTHOUSE_BIN:-}"
+PRYSM_BIN="${PRYSM_BIN:-}"
 
 HTTP_ADDR="${HTTP_ADDR:-127.0.0.1}"
 HTTP_PORT="${HTTP_PORT:-8545}"
@@ -36,11 +36,12 @@ ETHREX_P2P_PORT="${ETHREX_P2P_PORT:-30303}"
 ETHREX_DISCOVERY_PORT="${ETHREX_DISCOVERY_PORT:-30303}"
 ETHREX_SYNCMODE="${ETHREX_SYNCMODE:-snap}"
 
-LIGHTHOUSE_HTTP_ADDR="${LIGHTHOUSE_HTTP_ADDR:-127.0.0.1}"
-LIGHTHOUSE_HTTP_PORT="${LIGHTHOUSE_HTTP_PORT:-5052}"
-LIGHTHOUSE_P2P_PORT="${LIGHTHOUSE_P2P_PORT:-9000}"
-LIGHTHOUSE_DISCOVERY_PORT="${LIGHTHOUSE_DISCOVERY_PORT:-9000}"
-LIGHTHOUSE_DATADIR="${LIGHTHOUSE_DATADIR:-$DATA_DIR/lighthouse}"
+PRYSM_HTTP_ADDR="${PRYSM_HTTP_ADDR:-127.0.0.1}"
+PRYSM_HTTP_PORT="${PRYSM_HTTP_PORT:-3500}"
+PRYSM_P2P_TCP_PORT="${PRYSM_P2P_TCP_PORT:-13000}"
+PRYSM_P2P_UDP_PORT="${PRYSM_P2P_UDP_PORT:-12000}"
+PRYSM_P2P_QUIC_PORT="${PRYSM_P2P_QUIC_PORT:-13000}"
+PRYSM_DATADIR="${PRYSM_DATADIR:-$DATA_DIR/prysm}"
 ETHREX_DATADIR="${ETHREX_DATADIR:-$DATA_DIR/ethrex}"
 
 AUTHRPC_CONNECT_HOST="${AUTHRPC_CONNECT_HOST:-127.0.0.1}"
@@ -66,13 +67,13 @@ Main environment overrides:
   WORKDIR                  Base directory for metadata, data, logs and cloned repos
   SRC_DIR                  Base directory for source checkouts (defaults to WORKDIR/src)
   ETHREX_SRC              Existing ethrex checkout to use instead of cloning
-  LIGHTHOUSE_SRC          Existing lighthouse checkout to use instead of cloning
+  PRYSM_SRC               Existing Prysm checkout to use instead of cloning
   ETHREX_GIT_URL          ethrex clone URL when ETHREX_SRC does not already exist
-  LIGHTHOUSE_GIT_URL      lighthouse clone URL when LIGHTHOUSE_SRC does not already exist
+  PRYSM_GIT_URL           Prysm clone URL when PRYSM_SRC does not already exist
   ETHREX_REF              Git ref to checkout in ETHREX_SRC (defaults to glamsterdam-devnet-4)
-  LIGHTHOUSE_REF          Git ref to checkout in LIGHTHOUSE_SRC (defaults to glamsterdam-devnet-4)
+  PRYSM_REF               Git ref to checkout in PRYSM_SRC (defaults to glamsterdam-devnet-4)
   ETHREX_BIN              Explicit ethrex binary path
-  LIGHTHOUSE_BIN          Explicit lighthouse binary path
+  PRYSM_BIN               Explicit Prysm beacon-chain binary path
   CHECKPOINT_SYNC_URL     Beacon checkpoint sync endpoint
 EOF
 }
@@ -128,7 +129,7 @@ create_jwt_secret() {
   log "info" "created jwt secret at $JWT_SECRET_PATH"
 }
 
-write_lighthouse_bootstrap_yaml() {
+write_prysm_bootstrap_yaml() {
   local src="$METADATA_DIR/cl/bootstrap_nodes.txt"
   local dst="$METADATA_DIR/cl/bootstrap_nodes.yaml"
 
@@ -153,7 +154,7 @@ setup() {
   download_file "$CONFIG_BASE_URL/cl/deposit_contract_block_hash.txt" "$METADATA_DIR/cl/deposit_contract_block_hash.txt"
   download_file "$CONFIG_BASE_URL/cl/bootstrap_nodes.txt" "$METADATA_DIR/cl/bootstrap_nodes.txt"
 
-  write_lighthouse_bootstrap_yaml
+  write_prysm_bootstrap_yaml
   create_jwt_secret
 
   log "info" "$NETWORK_NAME metadata is ready under $METADATA_DIR"
@@ -187,7 +188,7 @@ clone_repo() {
 clone_all() {
   ensure_layout
   clone_repo "ethrex" "$ETHREX_GIT_URL" "$ETHREX_SRC" "$ETHREX_REF"
-  clone_repo "lighthouse" "$LIGHTHOUSE_GIT_URL" "$LIGHTHOUSE_SRC" "$LIGHTHOUSE_REF"
+  clone_repo "prysm" "$PRYSM_GIT_URL" "$PRYSM_SRC" "$PRYSM_REF"
 }
 
 build_ethrex() {
@@ -197,16 +198,25 @@ build_ethrex() {
   cargo build --release --bin ethrex --manifest-path "$ETHREX_SRC/Cargo.toml"
 }
 
-build_lighthouse() {
-  require_cmd cargo
-  [[ -d "$LIGHTHOUSE_SRC" ]] || die "lighthouse source directory does not exist: $LIGHTHOUSE_SRC"
-  log "info" "building lighthouse from $LIGHTHOUSE_SRC"
-  cargo build --release --bin lighthouse --manifest-path "$LIGHTHOUSE_SRC/Cargo.toml"
+build_prysm() {
+  local bazel_bin
+
+  [[ -d "$PRYSM_SRC" ]] || die "Prysm source directory does not exist: $PRYSM_SRC"
+  if command -v bazelisk >/dev/null 2>&1; then
+    bazel_bin="$(command -v bazelisk)"
+  elif command -v bazel >/dev/null 2>&1; then
+    bazel_bin="$(command -v bazel)"
+  else
+    die "missing required command for Prysm build: bazelisk or bazel"
+  fi
+
+  log "info" "building Prysm beacon-chain from $PRYSM_SRC"
+  (cd "$PRYSM_SRC" && "$bazel_bin" build //cmd/beacon-chain:beacon-chain)
 }
 
 build_all() {
   build_ethrex
-  build_lighthouse
+  build_prysm
 }
 
 detect_ethrex_bin() {
@@ -229,24 +239,35 @@ detect_ethrex_bin() {
   die "ethrex binary not found; run build first or set ETHREX_BIN"
 }
 
-detect_lighthouse_bin() {
-  if [[ -n "$LIGHTHOUSE_BIN" ]]; then
-    [[ -x "$LIGHTHOUSE_BIN" ]] || die "LIGHTHOUSE_BIN is not executable: $LIGHTHOUSE_BIN"
-    printf '%s\n' "$LIGHTHOUSE_BIN"
+detect_prysm_bin() {
+  local candidate
+
+  if [[ -n "$PRYSM_BIN" ]]; then
+    [[ -x "$PRYSM_BIN" ]] || die "PRYSM_BIN is not executable: $PRYSM_BIN"
+    printf '%s\n' "$PRYSM_BIN"
     return
   fi
 
-  if [[ -x "$LIGHTHOUSE_SRC/target/release/lighthouse" ]]; then
-    printf '%s\n' "$LIGHTHOUSE_SRC/target/release/lighthouse"
+  for candidate in \
+    "$PRYSM_SRC/bazel-bin/cmd/beacon-chain/beacon-chain_/beacon-chain" \
+    "$PRYSM_SRC/bazel-bin/cmd/beacon-chain/beacon-chain"; do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+
+  if command -v beacon-chain >/dev/null 2>&1; then
+    command -v beacon-chain
     return
   fi
 
-  if command -v lighthouse >/dev/null 2>&1; then
-    command -v lighthouse
+  if command -v prysm-beacon-chain >/dev/null 2>&1; then
+    command -v prysm-beacon-chain
     return
   fi
 
-  die "lighthouse binary not found; run build first or set LIGHTHOUSE_BIN"
+  die "Prysm beacon-chain binary not found; run build first or set PRYSM_BIN"
 }
 
 comma_join_file() {
@@ -303,22 +324,28 @@ run_el() {
 }
 
 run_cl() {
-  local lighthouse_bin
+  local prysm_bin deposit_contract_block
 
   setup
-  lighthouse_bin="$(detect_lighthouse_bin)"
+  prysm_bin="$(detect_prysm_bin)"
+  deposit_contract_block="$(tr -d '[:space:]' < "$METADATA_DIR/cl/deposit_contract_block.txt")"
+  [[ -n "$deposit_contract_block" ]] || deposit_contract_block=0
 
-  exec "$lighthouse_bin" bn \
-    --testnet-dir "$METADATA_DIR/cl" \
-    --datadir "$LIGHTHOUSE_DATADIR" \
+  exec "$prysm_bin" \
+    --chain-config-file "$METADATA_DIR/cl/config.yaml" \
+    --genesis-state "$METADATA_DIR/cl/genesis.ssz" \
+    --bootstrap-node "$METADATA_DIR/cl/bootstrap_nodes.yaml" \
+    --datadir "$PRYSM_DATADIR" \
     --execution-endpoint "http://${AUTHRPC_CONNECT_HOST}:${AUTHRPC_PORT}" \
-    --execution-jwt "$JWT_SECRET_PATH" \
+    --jwt-secret "$JWT_SECRET_PATH" \
     --checkpoint-sync-url "$CHECKPOINT_SYNC_URL" \
-    --http \
-    --http-address "$LIGHTHOUSE_HTTP_ADDR" \
-    --http-port "$LIGHTHOUSE_HTTP_PORT" \
-    --port "$LIGHTHOUSE_P2P_PORT" \
-    --discovery-port "$LIGHTHOUSE_DISCOVERY_PORT"
+    --contract-deployment-block "$deposit_contract_block" \
+    --accept-terms-of-use \
+    --http-host "$PRYSM_HTTP_ADDR" \
+    --http-port "$PRYSM_HTTP_PORT" \
+    --p2p-tcp-port "$PRYSM_P2P_TCP_PORT" \
+    --p2p-udp-port "$PRYSM_P2P_UDP_PORT" \
+    --p2p-quic-port "$PRYSM_P2P_QUIC_PORT"
 }
 
 start_background() {
@@ -338,15 +365,15 @@ run_all() {
 
   start_background "ethrex" "$LOG_DIR/ethrex.log" "$0" run-el
   wait_for_port "$AUTHRPC_CONNECT_HOST" "$AUTHRPC_PORT" "$AUTHRPC_WAIT_SECS"
-  start_background "lighthouse" "$LOG_DIR/lighthouse.log" "$0" run-cl
+  start_background "prysm" "$LOG_DIR/prysm.log" "$0" run-cl
 
   cat <<EOF
 Started $NETWORK_NAME services.
 
 Ethrex log:     $LOG_DIR/ethrex.log
-Lighthouse log: $LOG_DIR/lighthouse.log
+Prysm log:      $LOG_DIR/prysm.log
 Ethrex PID:     $(cat "$RUN_DIR/ethrex.pid")
-Lighthouse PID: $(cat "$RUN_DIR/lighthouse.pid")
+Prysm PID:      $(cat "$RUN_DIR/prysm.pid")
 
 To stop both:
   $0 stop
@@ -372,7 +399,7 @@ stop_one() {
 }
 
 stop_all() {
-  stop_one "lighthouse"
+  stop_one "prysm"
   stop_one "ethrex"
 }
 
@@ -391,7 +418,7 @@ DATA_DIR=$DATA_DIR
 LOG_DIR=$LOG_DIR
 RUN_DIR=$RUN_DIR
 ETHREX_SRC=$ETHREX_SRC
-LIGHTHOUSE_SRC=$LIGHTHOUSE_SRC
+PRYSM_SRC=$PRYSM_SRC
 JWT_SECRET_PATH=$JWT_SECRET_PATH
 CONFIG_BASE_URL=$CONFIG_BASE_URL
 CHECKPOINT_SYNC_URL=$CHECKPOINT_SYNC_URL
