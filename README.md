@@ -1,37 +1,37 @@
-# bal-devnet-3 + Ethrex
+# Glamsterdam devnet-4 + Ethrex
 
-This directory contains a small bootstrap script for joining `bal-devnet-3` with:
+This directory contains a small bootstrap script for joining `glamsterdam-devnet-4` with:
 
 - `ethrex` as the EL client
 - `lighthouse` as the CL client
 
 The script is designed to work from a clean directory:
 
-- it downloads the published `bal-devnet-3` EL and CL metadata
+- it downloads the published `glamsterdam-devnet-4` EL and CL metadata
 - it creates a shared JWT secret for the Engine API
 - it reuses local source checkouts under `./src` by default
-- it checks out the `bal-devnet-3` branches for `ethrex` and `lighthouse` by default
+- it checks out the `glamsterdam-devnet-4` branches for `ethrex` and `lighthouse` by default
 - it can also clone `ethrex` and `lighthouse` itself and build both from source
 
 ## Files
 
-- `bal-devnet-3-ethrex.sh`: bootstrap entrypoint
+- `glamsterdam-devnet-4-ethrex.sh`: bootstrap entrypoint
 
 ## Quick start
 
 Clone the repos into `./src` if needed, then build and run them from there:
 
 ```bash
-./bal-devnet-3-ethrex.sh clone
-./bal-devnet-3-ethrex.sh setup
-./bal-devnet-3-ethrex.sh build
-./bal-devnet-3-ethrex.sh run-all
+./glamsterdam-devnet-4-ethrex.sh clone
+./glamsterdam-devnet-4-ethrex.sh setup
+./glamsterdam-devnet-4-ethrex.sh build
+./glamsterdam-devnet-4-ethrex.sh run-all
 ```
 
 Start over from scratch without deleting `./src`:
 
 ```bash
-./bal-devnet-3-ethrex.sh run-all --clean
+./glamsterdam-devnet-4-ethrex.sh run-all --clean
 ```
 
 Use different source checkouts explicitly:
@@ -39,24 +39,24 @@ Use different source checkouts explicitly:
 ```bash
 ETHREX_SRC=/path/to/ethrex \
 LIGHTHOUSE_SRC=/path/to/lighthouse \
-./bal-devnet-3-ethrex.sh build
+./glamsterdam-devnet-4-ethrex.sh build
 
 ETHREX_SRC=/path/to/ethrex \
 LIGHTHOUSE_SRC=/path/to/lighthouse \
-./bal-devnet-3-ethrex.sh run-all
+./glamsterdam-devnet-4-ethrex.sh run-all
 ```
 
 Run the clients separately:
 
 ```bash
-./bal-devnet-3-ethrex.sh run-el
-./bal-devnet-3-ethrex.sh run-cl
+./glamsterdam-devnet-4-ethrex.sh run-el
+./glamsterdam-devnet-4-ethrex.sh run-cl
 ```
 
 Stop background processes started by `run-all`:
 
 ```bash
-./bal-devnet-3-ethrex.sh stop
+./glamsterdam-devnet-4-ethrex.sh stop
 ```
 
 ## Useful overrides
@@ -66,8 +66,8 @@ Stop background processes started by `run-all`:
 - `ETHREX_BIN`: explicit ethrex binary path
 - `LIGHTHOUSE_BIN`: explicit lighthouse binary path
 - `ETHREX_SYNCMODE`: ethrex sync mode override (`snap` by default, set `full` if needed)
-- `ETHREX_REF`: git ref to check out in `ethrex` instead of the default `bal-devnet-3`
-- `LIGHTHOUSE_REF`: git ref to check out in `lighthouse` instead of the default `bal-devnet-3`
+- `ETHREX_REF`: git ref to check out in `ethrex` instead of the default `glamsterdam-devnet-4`
+- `LIGHTHOUSE_REF`: git ref to check out in `lighthouse` instead of the default `glamsterdam-devnet-4`
 - `CHECKPOINT_SYNC_URL`: override the beacon checkpoint sync endpoint
 - `SRC_DIR`: change the default source checkout root from `./src`
 - `WORKDIR`: move metadata, data, logs and source clones elsewhere

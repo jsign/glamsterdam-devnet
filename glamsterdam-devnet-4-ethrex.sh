@@ -4,9 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 WORKDIR="${WORKDIR:-$SCRIPT_DIR}"
 
-NETWORK_NAME="${NETWORK_NAME:-bal-devnet-3}"
-CONFIG_BASE_URL="${CONFIG_BASE_URL:-https://config.bal-devnet-3.ethpandaops.io}"
-CHECKPOINT_SYNC_URL="${CHECKPOINT_SYNC_URL:-https://checkpoint-sync.bal-devnet-3.ethpandaops.io}"
+NETWORK_NAME="${NETWORK_NAME:-glamsterdam-devnet-4}"
+CONFIG_BASE_URL="${CONFIG_BASE_URL:-https://config.glamsterdam-devnet-4.ethpandaops.io}"
+CHECKPOINT_SYNC_URL="${CHECKPOINT_SYNC_URL:-https://checkpoint-sync.glamsterdam-devnet-4.ethpandaops.io}"
 
 METADATA_DIR="${METADATA_DIR:-$WORKDIR/metadata}"
 SECRETS_DIR="${SECRETS_DIR:-$WORKDIR/secrets}"
@@ -19,8 +19,8 @@ JWT_SECRET_PATH="${JWT_SECRET_PATH:-$SECRETS_DIR/jwt.hex}"
 
 ETHREX_GIT_URL="${ETHREX_GIT_URL:-https://github.com/lambdaclass/ethrex.git}"
 LIGHTHOUSE_GIT_URL="${LIGHTHOUSE_GIT_URL:-https://github.com/sigp/lighthouse.git}"
-ETHREX_REF="${ETHREX_REF:-bal-devnet-3}"
-LIGHTHOUSE_REF="${LIGHTHOUSE_REF:-bal-devnet-3}"
+ETHREX_REF="${ETHREX_REF:-glamsterdam-devnet-4}"
+LIGHTHOUSE_REF="${LIGHTHOUSE_REF:-glamsterdam-devnet-4}"
 
 ETHREX_SRC="${ETHREX_SRC:-$SRC_DIR/ethrex}"
 LIGHTHOUSE_SRC="${LIGHTHOUSE_SRC:-$SRC_DIR/lighthouse}"
@@ -47,17 +47,20 @@ AUTHRPC_CONNECT_HOST="${AUTHRPC_CONNECT_HOST:-127.0.0.1}"
 AUTHRPC_WAIT_SECS="${AUTHRPC_WAIT_SECS:-60}"
 
 usage() {
-  cat <<'EOF'
+  local script_name
+  script_name="$(basename -- "$0")"
+
+  cat <<EOF
 Usage:
-  ./bal-devnet-3-ethrex.sh setup
-  ./bal-devnet-3-ethrex.sh clone
-  ./bal-devnet-3-ethrex.sh build
-  ./bal-devnet-3-ethrex.sh run-el
-  ./bal-devnet-3-ethrex.sh run-cl
-  ./bal-devnet-3-ethrex.sh run-all [--clean]
-  ./bal-devnet-3-ethrex.sh stop
-  ./bal-devnet-3-ethrex.sh clean
-  ./bal-devnet-3-ethrex.sh paths
+  ./$script_name setup
+  ./$script_name clone
+  ./$script_name build
+  ./$script_name run-el
+  ./$script_name run-cl
+  ./$script_name run-all [--clean]
+  ./$script_name stop
+  ./$script_name clean
+  ./$script_name paths
 
 Main environment overrides:
   WORKDIR                  Base directory for metadata, data, logs and cloned repos
@@ -66,8 +69,8 @@ Main environment overrides:
   LIGHTHOUSE_SRC          Existing lighthouse checkout to use instead of cloning
   ETHREX_GIT_URL          ethrex clone URL when ETHREX_SRC does not already exist
   LIGHTHOUSE_GIT_URL      lighthouse clone URL when LIGHTHOUSE_SRC does not already exist
-  ETHREX_REF              Git ref to checkout in ETHREX_SRC (defaults to bal-devnet-3)
-  LIGHTHOUSE_REF          Git ref to checkout in LIGHTHOUSE_SRC (defaults to bal-devnet-3)
+  ETHREX_REF              Git ref to checkout in ETHREX_SRC (defaults to glamsterdam-devnet-4)
+  LIGHTHOUSE_REF          Git ref to checkout in LIGHTHOUSE_SRC (defaults to glamsterdam-devnet-4)
   ETHREX_BIN              Explicit ethrex binary path
   LIGHTHOUSE_BIN          Explicit lighthouse binary path
   CHECKPOINT_SYNC_URL     Beacon checkpoint sync endpoint
@@ -153,7 +156,7 @@ setup() {
   write_lighthouse_bootstrap_yaml
   create_jwt_secret
 
-  log "info" "bal-devnet-3 metadata is ready under $METADATA_DIR"
+  log "info" "$NETWORK_NAME metadata is ready under $METADATA_DIR"
 }
 
 clone_repo() {
@@ -338,7 +341,7 @@ run_all() {
   start_background "lighthouse" "$LOG_DIR/lighthouse.log" "$0" run-cl
 
   cat <<EOF
-Started bal-devnet-3 services.
+Started $NETWORK_NAME services.
 
 Ethrex log:     $LOG_DIR/ethrex.log
 Lighthouse log: $LOG_DIR/lighthouse.log
