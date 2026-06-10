@@ -4,9 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 WORKDIR="${WORKDIR:-$SCRIPT_DIR}"
 
-NETWORK_NAME="${NETWORK_NAME:-glamsterdam-devnet-4}"
-CONFIG_BASE_URL="${CONFIG_BASE_URL:-https://config.glamsterdam-devnet-4.ethpandaops.io}"
-CHECKPOINT_SYNC_URL="${CHECKPOINT_SYNC_URL:-https://checkpoint-sync.glamsterdam-devnet-4.ethpandaops.io}"
+NETWORK_NAME="${NETWORK_NAME:-glamsterdam-devnet-5}"
+CONFIG_BASE_URL="${CONFIG_BASE_URL:-https://config.glamsterdam-devnet-5.ethpandaops.io}"
+CHECKPOINT_SYNC_URL="${CHECKPOINT_SYNC_URL:-https://checkpoint-sync.glamsterdam-devnet-5.ethpandaops.io}"
 
 METADATA_DIR="${METADATA_DIR:-$WORKDIR/metadata}"
 SECRETS_DIR="${SECRETS_DIR:-$WORKDIR/secrets}"
@@ -19,8 +19,8 @@ JWT_SECRET_PATH="${JWT_SECRET_PATH:-$SECRETS_DIR/jwt.hex}"
 
 ETHREX_GIT_URL="${ETHREX_GIT_URL:-https://github.com/lambdaclass/ethrex.git}"
 PRYSM_GIT_URL="${PRYSM_GIT_URL:-https://github.com/OffchainLabs/prysm.git}"
-ETHREX_REF="${ETHREX_REF:-glamsterdam-devnet-4}"
-PRYSM_REF="${PRYSM_REF:-glamsterdam-devnet-4}"
+ETHREX_REF="${ETHREX_REF:-glamsterdam-devnet-5}"
+PRYSM_REF="${PRYSM_REF:-glamsterdam-devnet-5}"
 
 ETHREX_SRC="${ETHREX_SRC:-$SRC_DIR/ethrex}"
 PRYSM_SRC="${PRYSM_SRC:-$SRC_DIR/prysm}"
@@ -70,8 +70,8 @@ Main environment overrides:
   PRYSM_SRC               Existing Prysm checkout to use instead of cloning
   ETHREX_GIT_URL          ethrex clone URL when ETHREX_SRC does not already exist
   PRYSM_GIT_URL           Prysm clone URL when PRYSM_SRC does not already exist
-  ETHREX_REF              Git ref to checkout in ETHREX_SRC (defaults to glamsterdam-devnet-4)
-  PRYSM_REF               Git ref to checkout in PRYSM_SRC (defaults to glamsterdam-devnet-4)
+  ETHREX_REF              Git ref to checkout in ETHREX_SRC (defaults to glamsterdam-devnet-5)
+  PRYSM_REF               Git ref to checkout in PRYSM_SRC (defaults to glamsterdam-devnet-5)
   ETHREX_BIN              Explicit ethrex binary path
   PRYSM_BIN               Explicit Prysm beacon-chain binary path
   CHECKPOINT_SYNC_URL     Beacon checkpoint sync endpoint

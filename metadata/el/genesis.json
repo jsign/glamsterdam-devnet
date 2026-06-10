@@ -1,6 +1,6 @@
 {
   "config": {
-    "chainId": 7021244706,
+    "chainId": 7095321190,
     "homesteadBlock": 0,
     "eip150Block": 0,
     "eip155Block": 0,
@@ -51,9 +51,9 @@
     "depositContractAddress": "0x00000000219ab540356cBB839Cbe05303d7705Fa",
     "pragueTime": 0,
     "osakaTime": 0,
-    "bpo1Time": 1779444384,
-    "bpo2Time": 1779444768,
-    "amsterdamTime": 1779455520
+    "bpo1Time": 1780578384,
+    "bpo2Time": 1780578768,
+    "amsterdamTime": 1780589520
   },
   "alloc": {
     "0x0000000000000000000000000000000000000000": {
@@ -967,5 +967,5 @@
   "nonce": "0x1234",
   "mixhash": "0x0000000000000000000000000000000000000000000000000000000000000000",
   "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "timestamp": "1779443940"
+  "timestamp": "1780577940"
 }
