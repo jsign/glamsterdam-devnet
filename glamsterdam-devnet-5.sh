@@ -40,6 +40,7 @@ ETHREX_PRECOMPUTE_WITNESSES="${ETHREX_PRECOMPUTE_WITNESSES:-true}"
 
 PRYSM_HTTP_ADDR="${PRYSM_HTTP_ADDR:-127.0.0.1}"
 PRYSM_HTTP_PORT="${PRYSM_HTTP_PORT:-3500}"
+PRYSM_P2P_LOCAL_IP="${PRYSM_P2P_LOCAL_IP:-auto}"
 PRYSM_P2P_TCP_PORT="${PRYSM_P2P_TCP_PORT:-13000}"
 PRYSM_P2P_UDP_PORT="${PRYSM_P2P_UDP_PORT:-12000}"
 PRYSM_P2P_QUIC_PORT="${PRYSM_P2P_QUIC_PORT:-13000}"
@@ -79,6 +80,7 @@ Main environment overrides:
   ETHREX_HTTP_API         ethrex HTTP API modules (defaults to eth,net,web3,debug)
   ETHREX_PRECOMPUTE_WITNESSES
                            Enable ethrex witness precomputation (defaults to true)
+  PRYSM_P2P_LOCAL_IP       Local IP for Prysm P2P listeners (defaults to auto)
   CHECKPOINT_SYNC_URL     Beacon checkpoint sync endpoint
 EOF
 }
@@ -307,6 +309,21 @@ wait_for_port() {
   done
 }
 
+detect_default_ipv4() {
+  command -v ip >/dev/null 2>&1 || return 1
+
+  ip -4 route get 1.1.1.1 2>/dev/null | awk '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "src") {
+          print $(i + 1)
+          exit
+        }
+      }
+    }
+  '
+}
+
 run_el() {
   local ethrex_bin bootnodes
 
@@ -332,28 +349,43 @@ run_el() {
 }
 
 run_cl() {
-  local prysm_bin deposit_contract_block
+  local prysm_bin deposit_contract_block p2p_local_ip
+  local -a prysm_args
 
   setup
   prysm_bin="$(detect_prysm_bin)"
   deposit_contract_block="$(tr -d '[:space:]' < "$METADATA_DIR/cl/deposit_contract_block.txt")"
   [[ -n "$deposit_contract_block" ]] || deposit_contract_block=0
+  p2p_local_ip="$PRYSM_P2P_LOCAL_IP"
 
-  exec "$prysm_bin" \
-    --chain-config-file "$METADATA_DIR/cl/config.yaml" \
-    --genesis-state "$METADATA_DIR/cl/genesis.ssz" \
-    --bootstrap-node "$METADATA_DIR/cl/bootstrap_nodes.yaml" \
-    --datadir "$PRYSM_DATADIR" \
-    --execution-endpoint "http://${AUTHRPC_CONNECT_HOST}:${AUTHRPC_PORT}" \
-    --jwt-secret "$JWT_SECRET_PATH" \
-    --checkpoint-sync-url "$CHECKPOINT_SYNC_URL" \
-    --contract-deployment-block "$deposit_contract_block" \
-    --accept-terms-of-use \
-    --http-host "$PRYSM_HTTP_ADDR" \
-    --http-port "$PRYSM_HTTP_PORT" \
-    --p2p-tcp-port "$PRYSM_P2P_TCP_PORT" \
-    --p2p-udp-port "$PRYSM_P2P_UDP_PORT" \
+  if [[ "$p2p_local_ip" == "auto" ]]; then
+    p2p_local_ip="$(detect_default_ipv4 || true)"
+    [[ -n "$p2p_local_ip" ]] || die "could not auto-detect Prysm P2P local IP; set PRYSM_P2P_LOCAL_IP explicitly or set PRYSM_P2P_LOCAL_IP=none"
+  fi
+
+  prysm_args=(
+    --chain-config-file "$METADATA_DIR/cl/config.yaml"
+    --genesis-state "$METADATA_DIR/cl/genesis.ssz"
+    --bootstrap-node "$METADATA_DIR/cl/bootstrap_nodes.yaml"
+    --datadir "$PRYSM_DATADIR"
+    --execution-endpoint "http://${AUTHRPC_CONNECT_HOST}:${AUTHRPC_PORT}"
+    --jwt-secret "$JWT_SECRET_PATH"
+    --checkpoint-sync-url "$CHECKPOINT_SYNC_URL"
+    --contract-deployment-block "$deposit_contract_block"
+    --accept-terms-of-use
+    --http-host "$PRYSM_HTTP_ADDR"
+    --http-port "$PRYSM_HTTP_PORT"
+    --p2p-tcp-port "$PRYSM_P2P_TCP_PORT"
+    --p2p-udp-port "$PRYSM_P2P_UDP_PORT"
     --p2p-quic-port "$PRYSM_P2P_QUIC_PORT"
+  )
+
+  if [[ -n "$p2p_local_ip" && "$p2p_local_ip" != "none" ]]; then
+    log "info" "using Prysm P2P local IP $p2p_local_ip"
+    prysm_args+=(--p2p-local-ip "$p2p_local_ip")
+  fi
+
+  exec "$prysm_bin" "${prysm_args[@]}"
 }
 
 start_background() {

@@ -73,6 +73,7 @@ Stop background processes started by `run-all`:
 - `ETHREX_SYNCMODE`: ethrex sync mode override (`snap` by default, set `full` if needed)
 - `ETHREX_HTTP_API`: ethrex HTTP API modules (`eth,net,web3,debug` by default)
 - `ETHREX_PRECOMPUTE_WITNESSES`: enable ethrex witness precomputation (`true` by default)
+- `PRYSM_P2P_LOCAL_IP`: Prysm P2P listen IP (`auto` by default; set an IP explicitly or `none` to skip)
 - `ETHREX_REF`: git ref to check out in `ethrex` instead of the default `glamsterdam-devnet-5`
 - `PRYSM_REF`: git ref to check out in `prysm` instead of the default `glamsterdam-devnet-5`
 - `CHECKPOINT_SYNC_URL`: override the beacon checkpoint sync endpoint
@@ -86,6 +87,7 @@ The script assumes these are already installed:
 - `bash`
 - `curl`
 - `openssl`
+- `ip` for automatic Prysm P2P local IP detection
 - `git` for cloning
 - `cargo` for ethrex source builds
 - `bazelisk` or `bazel` for Prysm source builds
