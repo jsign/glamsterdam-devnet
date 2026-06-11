@@ -71,6 +71,8 @@ Stop background processes started by `run-all`:
 - `ETHREX_BIN`: explicit ethrex binary path
 - `PRYSM_BIN`: explicit Prysm `beacon-chain` binary path
 - `ETHREX_SYNCMODE`: ethrex sync mode override (`snap` by default, set `full` if needed)
+- `ETHREX_HTTP_API`: ethrex HTTP API modules (`eth,net,web3,debug` by default)
+- `ETHREX_PRECOMPUTE_WITNESSES`: enable ethrex witness precomputation (`true` by default)
 - `ETHREX_REF`: git ref to check out in `ethrex` instead of the default `glamsterdam-devnet-5`
 - `PRYSM_REF`: git ref to check out in `prysm` instead of the default `glamsterdam-devnet-5`
 - `CHECKPOINT_SYNC_URL`: override the beacon checkpoint sync endpoint

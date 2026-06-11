@@ -35,6 +35,8 @@ AUTHRPC_PORT="${AUTHRPC_PORT:-8551}"
 ETHREX_P2P_PORT="${ETHREX_P2P_PORT:-30303}"
 ETHREX_DISCOVERY_PORT="${ETHREX_DISCOVERY_PORT:-30303}"
 ETHREX_SYNCMODE="${ETHREX_SYNCMODE:-snap}"
+ETHREX_HTTP_API="${ETHREX_HTTP_API:-eth,net,web3,debug}"
+ETHREX_PRECOMPUTE_WITNESSES="${ETHREX_PRECOMPUTE_WITNESSES:-true}"
 
 PRYSM_HTTP_ADDR="${PRYSM_HTTP_ADDR:-127.0.0.1}"
 PRYSM_HTTP_PORT="${PRYSM_HTTP_PORT:-3500}"
@@ -74,6 +76,9 @@ Main environment overrides:
   PRYSM_REF               Git ref to checkout in PRYSM_SRC (defaults to glamsterdam-devnet-5)
   ETHREX_BIN              Explicit ethrex binary path
   PRYSM_BIN               Explicit Prysm beacon-chain binary path
+  ETHREX_HTTP_API         ethrex HTTP API modules (defaults to eth,net,web3,debug)
+  ETHREX_PRECOMPUTE_WITNESSES
+                           Enable ethrex witness precomputation (defaults to true)
   CHECKPOINT_SYNC_URL     Beacon checkpoint sync endpoint
 EOF
 }
@@ -308,6 +313,9 @@ run_el() {
   setup
   ethrex_bin="$(detect_ethrex_bin)"
   bootnodes="$(comma_join_file "$METADATA_DIR/el/enodes.txt")"
+
+  export ETHREX_HTTP_API
+  export ETHREX_PRECOMPUTE_WITNESSES
 
   exec "$ethrex_bin" \
     --network "$METADATA_DIR/el/genesis.json" \
