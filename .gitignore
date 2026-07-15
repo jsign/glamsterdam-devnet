@@ -1,6 +1,7 @@
 # Runtime data
 data/
 logs/
+metadata/
 run/
 
 # Secrets and credentials

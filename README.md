@@ -13,6 +13,14 @@ The script is designed to work from a clean directory:
 - it checks out the `glamsterdam-devnet-7` branches for `ethrex` and `prysm` by default
 - it can also clone `ethrex` and `prysm` itself and build both from source
 
+To clean up a previous run before starting again:
+
+```bash
+./glamsterdam-devnet-7.sh clean
+```
+
+This stops background clients and removes generated metadata, secrets, chain data, logs and PID files without deleting `./src`.
+
 ## Files
 
 - `glamsterdam-devnet-7.sh`: bootstrap entrypoint
