@@ -1,42 +1,42 @@
-# Glamsterdam devnet-5 + Ethrex/Prysm
+# Glamsterdam devnet-7 + Ethrex/Prysm
 
-This directory contains a small bootstrap script for joining `glamsterdam-devnet-5` with:
+This directory contains a small bootstrap script for joining `glamsterdam-devnet-7` with:
 
 - `ethrex` as the EL client
 - `prysm` as the CL client
 
 The script is designed to work from a clean directory:
 
-- it downloads the published `glamsterdam-devnet-5` EL and CL metadata
+- it downloads the published `glamsterdam-devnet-7` EL and CL metadata
 - it creates a shared JWT secret for the Engine API
 - it reuses local source checkouts under `./src` by default
-- it checks out the `glamsterdam-devnet-5` branches for `ethrex` and `prysm` by default
+- it checks out the `glamsterdam-devnet-7` branches for `ethrex` and `prysm` by default
 - it can also clone `ethrex` and `prysm` itself and build both from source
 
 ## Files
 
-- `glamsterdam-devnet-5.sh`: bootstrap entrypoint
+- `glamsterdam-devnet-7.sh`: bootstrap entrypoint
 
 ## Upstream references
 
-- Spec: https://notes.ethereum.org/@ethpandaops/glamsterdam-devnet-5
-- Metadata: https://github.com/ethpandaops/glamsterdam-devnets/tree/master/network-configs/devnet-5/metadata
+- Spec: https://notes.ethereum.org/@ethpandaops/glamsterdam-devnet-7
+- Metadata: https://github.com/ethpandaops/glamsterdam-devnets/tree/master/network-configs/devnet-7/metadata
 
 ## Quick start
 
 Clone the repos into `./src` if needed, then build and run them from there:
 
 ```bash
-./glamsterdam-devnet-5.sh clone
-./glamsterdam-devnet-5.sh setup
-./glamsterdam-devnet-5.sh build
-./glamsterdam-devnet-5.sh run-all
+./glamsterdam-devnet-7.sh clone
+./glamsterdam-devnet-7.sh setup
+./glamsterdam-devnet-7.sh build
+./glamsterdam-devnet-7.sh run-all
 ```
 
 Start over from scratch without deleting `./src`:
 
 ```bash
-./glamsterdam-devnet-5.sh run-all --clean
+./glamsterdam-devnet-7.sh run-all --clean
 ```
 
 Use different source checkouts explicitly:
@@ -44,24 +44,24 @@ Use different source checkouts explicitly:
 ```bash
 ETHREX_SRC=/path/to/ethrex \
 PRYSM_SRC=/path/to/prysm \
-./glamsterdam-devnet-5.sh build
+./glamsterdam-devnet-7.sh build
 
 ETHREX_SRC=/path/to/ethrex \
 PRYSM_SRC=/path/to/prysm \
-./glamsterdam-devnet-5.sh run-all
+./glamsterdam-devnet-7.sh run-all
 ```
 
 Run the clients separately:
 
 ```bash
-./glamsterdam-devnet-5.sh run-el
-./glamsterdam-devnet-5.sh run-cl
+./glamsterdam-devnet-7.sh run-el
+./glamsterdam-devnet-7.sh run-cl
 ```
 
 Stop background processes started by `run-all`:
 
 ```bash
-./glamsterdam-devnet-5.sh stop
+./glamsterdam-devnet-7.sh stop
 ```
 
 ## Useful overrides
@@ -74,8 +74,8 @@ Stop background processes started by `run-all`:
 - `ETHREX_HTTP_API`: ethrex HTTP API modules (`eth,net,web3,debug` by default)
 - `ETHREX_PRECOMPUTE_WITNESSES`: enable ethrex witness precomputation (`true` by default)
 - `PRYSM_P2P_LOCAL_IP`: Prysm P2P listen IP (`auto` by default; set an IP explicitly or `none` to skip)
-- `ETHREX_REF`: git ref to check out in `ethrex` instead of the default `glamsterdam-devnet-5`
-- `PRYSM_REF`: git ref to check out in `prysm` instead of the default `glamsterdam-devnet-5`
+- `ETHREX_REF`: git ref to check out in `ethrex` instead of the default `glamsterdam-devnet-7`
+- `PRYSM_REF`: git ref to check out in `prysm` instead of the default `glamsterdam-devnet-7`
 - `CHECKPOINT_SYNC_URL`: override the beacon checkpoint sync endpoint
 - `SRC_DIR`: change the default source checkout root from `./src`
 - `WORKDIR`: move metadata, data, logs and source clones elsewhere

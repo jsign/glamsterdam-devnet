@@ -1,6 +1,6 @@
 {
   "config": {
-    "chainId": 7095321190,
+    "chainId": 7082904758,
     "homesteadBlock": 0,
     "eip150Block": 0,
     "eip155Block": 0,
@@ -51,9 +51,9 @@
     "depositContractAddress": "0x00000000219ab540356cBB839Cbe05303d7705Fa",
     "pragueTime": 0,
     "osakaTime": 0,
-    "bpo1Time": 1780578384,
-    "bpo2Time": 1780578768,
-    "amsterdamTime": 1780589520
+    "bpo1Time": 1784030784,
+    "bpo2Time": 1784031168,
+    "amsterdamTime": 1784044992
   },
   "alloc": {
     "0x0000000000000000000000000000000000000000": {
@@ -887,6 +887,11 @@
         "0x0000000000000000000000000000000000000000000000000000000000000000": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     },
+    "0x4e59b44847b379578588920cA78FbF26c0B4956C": {
+      "balance": "0",
+      "nonce": "1",
+      "code": "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3"
+    },
     "0x454b0EA7d8aD3C56D0CF2e44Ed97b2Feab4D7AF2": {
       "balance": "1000000000000000000000000000"
     },
@@ -963,9 +968,9 @@
   "coinbase": "0x0000000000000000000000000000000000000000",
   "difficulty": "0x0",
   "extraData": "",
-  "gasLimit": "0x3938700",
+  "gasLimit": "0x11e1a300",
   "nonce": "0x1234",
   "mixhash": "0x0000000000000000000000000000000000000000000000000000000000000000",
   "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "timestamp": "1780577940"
+  "timestamp": "1784030400"
 }

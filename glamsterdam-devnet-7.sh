@@ -4,9 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 WORKDIR="${WORKDIR:-$SCRIPT_DIR}"
 
-NETWORK_NAME="${NETWORK_NAME:-glamsterdam-devnet-5}"
-CONFIG_BASE_URL="${CONFIG_BASE_URL:-https://config.glamsterdam-devnet-5.ethpandaops.io}"
-CHECKPOINT_SYNC_URL="${CHECKPOINT_SYNC_URL:-https://checkpoint-sync.glamsterdam-devnet-5.ethpandaops.io}"
+NETWORK_NAME="${NETWORK_NAME:-glamsterdam-devnet-7}"
+CONFIG_BASE_URL="${CONFIG_BASE_URL:-https://config.glamsterdam-devnet-7.ethpandaops.io}"
+CHECKPOINT_SYNC_URL="${CHECKPOINT_SYNC_URL:-https://checkpoint-sync.glamsterdam-devnet-7.ethpandaops.io}"
 
 METADATA_DIR="${METADATA_DIR:-$WORKDIR/metadata}"
 SECRETS_DIR="${SECRETS_DIR:-$WORKDIR/secrets}"
@@ -19,8 +19,8 @@ JWT_SECRET_PATH="${JWT_SECRET_PATH:-$SECRETS_DIR/jwt.hex}"
 
 ETHREX_GIT_URL="${ETHREX_GIT_URL:-https://github.com/lambdaclass/ethrex.git}"
 PRYSM_GIT_URL="${PRYSM_GIT_URL:-https://github.com/OffchainLabs/prysm.git}"
-ETHREX_REF="${ETHREX_REF:-glamsterdam-devnet-5}"
-PRYSM_REF="${PRYSM_REF:-glamsterdam-devnet-5}"
+ETHREX_REF="${ETHREX_REF:-glamsterdam-devnet-7}"
+PRYSM_REF="${PRYSM_REF:-glamsterdam-devnet-7}"
 
 ETHREX_SRC="${ETHREX_SRC:-$SRC_DIR/ethrex}"
 PRYSM_SRC="${PRYSM_SRC:-$SRC_DIR/prysm}"
@@ -73,8 +73,8 @@ Main environment overrides:
   PRYSM_SRC               Existing Prysm checkout to use instead of cloning
   ETHREX_GIT_URL          ethrex clone URL when ETHREX_SRC does not already exist
   PRYSM_GIT_URL           Prysm clone URL when PRYSM_SRC does not already exist
-  ETHREX_REF              Git ref to checkout in ETHREX_SRC (defaults to glamsterdam-devnet-5)
-  PRYSM_REF               Git ref to checkout in PRYSM_SRC (defaults to glamsterdam-devnet-5)
+  ETHREX_REF              Git ref to checkout in ETHREX_SRC (defaults to glamsterdam-devnet-7)
+  PRYSM_REF               Git ref to checkout in PRYSM_SRC (defaults to glamsterdam-devnet-7)
   ETHREX_BIN              Explicit ethrex binary path
   PRYSM_BIN               Explicit Prysm beacon-chain binary path
   ETHREX_HTTP_API         ethrex HTTP API modules (defaults to eth,net,web3,debug)
@@ -141,7 +141,7 @@ write_prysm_bootstrap_yaml() {
   local dst="$METADATA_DIR/cl/bootstrap_nodes.yaml"
 
   : > "$dst"
-  while IFS= read -r line; do
+  while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -z "$line" ]] && continue
     printf -- '- "%s"\n' "$line" >> "$dst"
   done < "$src"
