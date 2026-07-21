@@ -19,7 +19,7 @@ To clean up a previous run before starting again:
 ./glamsterdam-devnet-7.sh clean
 ```
 
-This stops background clients and removes generated metadata, secrets, chain data, logs and PID files without deleting `./src`.
+This stops supervised clients and removes generated metadata, secrets, chain data, logs and legacy PID files without deleting `./src`.
 
 ## Files
 
@@ -41,6 +41,15 @@ Clone the repos into `./src` if needed, then build and run them from there:
 ./glamsterdam-devnet-7.sh run-all
 ```
 
+`run-all` starts Ethrex and Prysm as separate transient systemd user services. Each
+client is restarted independently after an unsuccessful exit, including an OOM
+kill. Restarts wait 10 seconds and stop after five failed starts within five
+minutes. The separate services also prevent systemd from stopping Prysm merely
+because Ethrex was OOM-killed in the same tmux scope.
+
+The services survive an SSH or tmux disconnection, but they are transient and
+are not enabled across VM reboots. Run `run-all` again after a reboot.
+
 Start over from scratch without deleting `./src`:
 
 ```bash
@@ -59,18 +68,39 @@ PRYSM_SRC=/path/to/prysm \
 ./glamsterdam-devnet-7.sh run-all
 ```
 
-Run the clients separately:
+Run the clients separately in the foreground without systemd supervision:
 
 ```bash
 ./glamsterdam-devnet-7.sh run-el
 ./glamsterdam-devnet-7.sh run-cl
 ```
 
-Stop background processes started by `run-all`:
+Inspect the supervised clients and their readiness ports:
+
+```bash
+./glamsterdam-devnet-7.sh status
+```
+
+`status` exits successfully only when both units are active and their local
+readiness ports are accepting connections. It also reports each main PID,
+restart count, result, and current memory usage.
+
+Stop services started by `run-all`:
 
 ```bash
 ./glamsterdam-devnet-7.sh stop
 ```
+
+Application output is appended to `logs/ethrex.log` and `logs/prysm.log` across
+automatic and manual restarts. Systemd lifecycle events are available with:
+
+```bash
+journalctl --user -u glamsterdam-devnet-7-ethrex.service
+journalctl --user -u glamsterdam-devnet-7-prysm.service
+```
+
+Supervision recovers the clients after memory exhaustion, but it does not lower
+their memory use. No memory ceiling or swap is configured by this launcher.
 
 ## Useful overrides
 
@@ -85,6 +115,8 @@ Stop background processes started by `run-all`:
 - `ETHREX_REF`: git ref to check out in `ethrex` instead of the default `glamsterdam-devnet-7`
 - `PRYSM_REF`: git ref to check out in `prysm` instead of the default `glamsterdam-devnet-7`
 - `CHECKPOINT_SYNC_URL`: override the beacon checkpoint sync endpoint
+- `AUTHRPC_WAIT_SECS`: seconds to wait for Ethrex readiness during `run-all` (60 by default)
+- `PRYSM_WAIT_SECS`: seconds to wait for Prysm readiness during `run-all` (60 by default)
 - `SRC_DIR`: change the default source checkout root from `./src`
 - `WORKDIR`: move metadata, data, logs and source clones elsewhere
 
@@ -96,6 +128,8 @@ The script assumes these are already installed:
 - `curl`
 - `openssl`
 - `ip` for automatic Prysm P2P local IP detection
+- `systemctl`, `systemd-run`, and `systemd-escape` for supervised `run-all`
+- an accessible systemd user manager for supervised `run-all`
 - `git` for cloning
 - `cargo` for ethrex source builds
 - `bazelisk` or `bazel` for Prysm source builds

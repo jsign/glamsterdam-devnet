@@ -2,6 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="$SCRIPT_DIR/$(basename -- "${BASH_SOURCE[0]}")"
+LAUNCH_DIR="$PWD"
 WORKDIR="${WORKDIR:-$SCRIPT_DIR}"
 
 NETWORK_NAME="${NETWORK_NAME:-glamsterdam-devnet-7}"
@@ -49,6 +51,7 @@ ETHREX_DATADIR="${ETHREX_DATADIR:-$DATA_DIR/ethrex}"
 
 AUTHRPC_CONNECT_HOST="${AUTHRPC_CONNECT_HOST:-127.0.0.1}"
 AUTHRPC_WAIT_SECS="${AUTHRPC_WAIT_SECS:-60}"
+PRYSM_WAIT_SECS="${PRYSM_WAIT_SECS:-60}"
 
 usage() {
   local script_name
@@ -62,6 +65,7 @@ Usage:
   ./$script_name run-el
   ./$script_name run-cl
   ./$script_name run-all [--clean]
+  ./$script_name status
   ./$script_name stop
   ./$script_name clean
   ./$script_name paths
@@ -82,6 +86,8 @@ Main environment overrides:
                            Enable ethrex witness precomputation (defaults to true)
   PRYSM_P2P_LOCAL_IP       Local IP for Prysm P2P listeners (defaults to auto)
   CHECKPOINT_SYNC_URL     Beacon checkpoint sync endpoint
+  AUTHRPC_WAIT_SECS       Ethrex readiness timeout for run-all (defaults to 60)
+  PRYSM_WAIT_SECS         Prysm readiness timeout for run-all (defaults to 60)
 EOF
 }
 
@@ -294,19 +300,11 @@ comma_join_file() {
   ' "$file"
 }
 
-wait_for_port() {
+port_is_open() {
   local host="$1"
   local port="$2"
-  local timeout_secs="$3"
-  local waited=0
 
-  while ! (echo >"/dev/tcp/$host/$port") >/dev/null 2>&1; do
-    sleep 1
-    waited=$((waited + 1))
-    if (( waited >= timeout_secs )); then
-      die "timed out waiting for $host:$port"
-    fi
-  done
+  (exec 3<>"/dev/tcp/$host/$port") >/dev/null 2>&1
 }
 
 detect_default_ipv4() {
@@ -324,10 +322,9 @@ detect_default_ipv4() {
   '
 }
 
-run_el() {
+exec_el() {
   local ethrex_bin bootnodes
 
-  setup
   ethrex_bin="$(detect_ethrex_bin)"
   bootnodes="$(comma_join_file "$METADATA_DIR/el/enodes.txt")"
 
@@ -348,11 +345,15 @@ run_el() {
     --discovery.port "$ETHREX_DISCOVERY_PORT"
 }
 
-run_cl() {
+run_el() {
+  setup
+  exec_el
+}
+
+exec_cl() {
   local prysm_bin deposit_contract_block p2p_local_ip
   local -a prysm_args
 
-  setup
   prysm_bin="$(detect_prysm_bin)"
   deposit_contract_block="$(tr -d '[:space:]' < "$METADATA_DIR/cl/deposit_contract_block.txt")"
   [[ -n "$deposit_contract_block" ]] || deposit_contract_block=0
@@ -388,59 +389,415 @@ run_cl() {
   exec "$prysm_bin" "${prysm_args[@]}"
 }
 
-start_background() {
-  local name="$1"
-  local log_file="$2"
-  shift 2
-
-  log "info" "starting $name in background"
-  "$@" >"$log_file" 2>&1 &
-  echo "$!" > "$RUN_DIR/$name.pid"
-  log "info" "$name pid $(cat "$RUN_DIR/$name.pid"), logs at $log_file"
-}
-
-run_all() {
+run_cl() {
   setup
-  ensure_layout
-
-  start_background "ethrex" "$LOG_DIR/ethrex.log" "$0" run-el
-  wait_for_port "$AUTHRPC_CONNECT_HOST" "$AUTHRPC_PORT" "$AUTHRPC_WAIT_SECS"
-  start_background "prysm" "$LOG_DIR/prysm.log" "$0" run-cl
-
-  cat <<EOF
-Started $NETWORK_NAME services.
-
-Ethrex log:     $LOG_DIR/ethrex.log
-Prysm log:      $LOG_DIR/prysm.log
-Ethrex PID:     $(cat "$RUN_DIR/ethrex.pid")
-Prysm PID:      $(cat "$RUN_DIR/prysm.pid")
-
-To stop both:
-  $0 stop
-EOF
+  exec_cl
 }
 
-stop_one() {
-  local name="$1"
-  local pid_file="$RUN_DIR/$name.pid"
+supervisor_available() {
+  command -v systemctl >/dev/null 2>&1 \
+    && command -v systemd-run >/dev/null 2>&1 \
+    && command -v systemd-escape >/dev/null 2>&1 \
+    && systemctl --user show-environment >/dev/null 2>&1
+}
 
-  if [[ ! -f "$pid_file" ]]; then
-    log "info" "no pid file for $name"
+require_supervisor() {
+  require_cmd systemctl
+  require_cmd systemd-run
+  require_cmd systemd-escape
+  systemctl --user show-environment >/dev/null 2>&1 \
+    || die "could not connect to the systemd user manager"
+}
+
+service_unit_name() {
+  local name="$1"
+
+  systemd-escape --mangle "${NETWORK_NAME}-${name}.service"
+}
+
+unit_load_state() {
+  local unit="$1"
+  local state
+
+  state="$(systemctl --user show "$unit" --property=LoadState --value 2>/dev/null || true)"
+  printf '%s\n' "${state:-not-found}"
+}
+
+unit_active_state() {
+  local unit="$1"
+  local state
+
+  state="$(systemctl --user show "$unit" --property=ActiveState --value 2>/dev/null || true)"
+  printf '%s\n' "${state:-not-found}"
+}
+
+prepare_unit_start() {
+  local unit="$1"
+  local state
+  local attempt
+
+  state="$(unit_active_state "$unit")"
+  case "$state" in
+    active|activating|deactivating|reloading)
+      die "systemd unit $unit is already $state; run '$SCRIPT_PATH stop' first"
+      ;;
+  esac
+
+  if [[ "$(unit_load_state "$unit")" == "not-found" ]]; then
     return
   fi
 
+  systemctl --user stop "$unit" >/dev/null 2>&1 || true
+  systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+  for attempt in {1..20}; do
+    [[ "$(unit_load_state "$unit")" == "not-found" ]] && return
+    sleep 0.1
+  done
+
+  die "inactive transient unit $unit is still loaded; try 'systemctl --user reset-failed $unit'"
+}
+
+legacy_process_matches() {
+  local name="$1"
+  local pid="$2"
+  local cmdline
+  local executable
+  local executable_name
+
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  [[ -r "/proc/$pid/cmdline" ]] || return 1
+  cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
+  executable="$(readlink -f -- "/proc/$pid/exe" 2>/dev/null || true)"
+  executable_name="$(basename -- "$executable")"
+
+  case "$name" in
+    ethrex)
+      [[ "$executable_name" == "ethrex" \
+        || (-n "$ETHREX_BIN" && "$executable" -ef "$ETHREX_BIN") \
+        || "$cmdline" == *"$SCRIPT_PATH run-el"* ]]
+      ;;
+    prysm)
+      [[ "$executable_name" == "beacon-chain" \
+        || "$executable_name" == "prysm-beacon-chain" \
+        || (-n "$PRYSM_BIN" && "$executable" -ef "$PRYSM_BIN") \
+        || "$cmdline" == *"$SCRIPT_PATH run-cl"* ]]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+reject_legacy_process() {
+  local name="$1"
+  local pid_file="$RUN_DIR/$name.pid"
   local pid
-  pid="$(cat "$pid_file")"
-  if kill -0 "$pid" >/dev/null 2>&1; then
-    log "info" "stopping $name pid $pid"
-    kill "$pid"
+
+  [[ -f "$pid_file" ]] || return 0
+  pid="$(tr -d '[:space:]' < "$pid_file")"
+
+  if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" >/dev/null 2>&1; then
+    if legacy_process_matches "$name" "$pid"; then
+      die "legacy $name process $pid is still running; run '$SCRIPT_PATH stop' first"
+    fi
+    log "warn" "removing stale $name pid file; pid $pid belongs to another process"
+  else
+    log "info" "removing stale $name pid file"
   fi
   rm -f "$pid_file"
 }
 
+stop_legacy_one() {
+  local name="$1"
+  local pid_file="$RUN_DIR/$name.pid"
+  local pid
+  local waited=0
+
+  if [[ ! -f "$pid_file" ]]; then
+    return
+  fi
+
+  pid="$(tr -d '[:space:]' < "$pid_file")"
+  if ! [[ "$pid" =~ ^[0-9]+$ ]] || ! kill -0 "$pid" >/dev/null 2>&1; then
+    log "info" "removing stale $name pid file"
+    rm -f "$pid_file"
+    return
+  fi
+
+  if ! legacy_process_matches "$name" "$pid"; then
+    log "warn" "not signaling pid $pid because it does not look like $name; removing stale pid file"
+    rm -f "$pid_file"
+    return
+  fi
+
+  log "info" "stopping legacy $name pid $pid"
+  kill "$pid"
+  while kill -0 "$pid" >/dev/null 2>&1; do
+    if (( waited >= 30 )); then
+      log "error" "timed out waiting for legacy $name pid $pid to stop"
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  rm -f "$pid_file"
+}
+
+absolute_log_path() {
+  local path="$1"
+  local parent
+
+  if [[ "$path" == /* ]]; then
+    printf '%s\n' "$path"
+    return
+  fi
+
+  parent="$(cd -- "$(dirname -- "$path")" && pwd)"
+  printf '%s/%s\n' "$parent" "$(basename -- "$path")"
+}
+
+append_service_log_marker() {
+  local name="$1"
+  local unit="$2"
+  local log_file="$3"
+
+  printf '\n[%s] [supervisor] starting %s as %s\n' \
+    "$(date --iso-8601=seconds)" "$name" "$unit" >> "$log_file"
+}
+
+start_supervised_service() {
+  local name="$1"
+  local subcommand="$2"
+  local log_file="$3"
+  local unit="$4"
+  local env_name
+  local -a systemd_args
+  local -a env_names=(
+    WORKDIR NETWORK_NAME CONFIG_BASE_URL CHECKPOINT_SYNC_URL
+    METADATA_DIR SECRETS_DIR DATA_DIR LOG_DIR RUN_DIR SRC_DIR JWT_SECRET_PATH
+    ETHREX_GIT_URL PRYSM_GIT_URL ETHREX_REF PRYSM_REF ETHREX_SRC PRYSM_SRC
+    ETHREX_BIN PRYSM_BIN HTTP_ADDR HTTP_PORT AUTHRPC_ADDR AUTHRPC_PORT
+    ETHREX_P2P_PORT ETHREX_DISCOVERY_PORT ETHREX_SYNCMODE ETHREX_HTTP_API
+    ETHREX_PRECOMPUTE_WITNESSES PRYSM_HTTP_ADDR PRYSM_HTTP_PORT
+    PRYSM_P2P_LOCAL_IP PRYSM_P2P_TCP_PORT PRYSM_P2P_UDP_PORT
+    PRYSM_P2P_QUIC_PORT PRYSM_DATADIR ETHREX_DATADIR AUTHRPC_CONNECT_HOST
+    AUTHRPC_WAIT_SECS PRYSM_WAIT_SECS
+  )
+
+  log_file="$(absolute_log_path "$log_file")"
+  append_service_log_marker "$name" "$unit" "$log_file"
+
+  systemd_args=(
+    systemd-run
+    --user
+    --quiet
+    --collect
+    --unit="$unit"
+    --description="$NETWORK_NAME $name client"
+    --service-type=exec
+    --working-directory="$LAUNCH_DIR"
+    --property=Restart=on-failure
+    --property=RestartSec=10s
+    --property=StartLimitBurst=5
+    --property=StartLimitIntervalSec=5min
+    --property=OOMPolicy=continue
+    --property="StandardOutput=append:$log_file"
+    --property="StandardError=append:$log_file"
+  )
+  for env_name in "${env_names[@]}"; do
+    systemd_args+=("--setenv=${env_name}=${!env_name}")
+  done
+  systemd_args+=(-- "$SCRIPT_PATH" "$subcommand")
+
+  log "info" "starting $name as systemd unit $unit"
+  "${systemd_args[@]}"
+}
+
+wait_for_service_port() {
+  local unit="$1"
+  local host="$2"
+  local port="$3"
+  local timeout_secs="$4"
+  local waited=0
+  local state
+
+  while (( waited < timeout_secs )); do
+    if systemctl --user is-active --quiet "$unit" && port_is_open "$host" "$port"; then
+      return
+    fi
+
+    state="$(unit_active_state "$unit")"
+    if [[ "$state" == "failed" || "$state" == "inactive" || "$state" == "not-found" ]]; then
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  return 1
+}
+
+stop_systemd_one() {
+  local name="$1"
+  local unit="$2"
+
+  if [[ "$(unit_load_state "$unit")" == "not-found" ]]; then
+    log "info" "no systemd unit for $name"
+    return
+  fi
+
+  log "info" "stopping $name systemd unit $unit"
+  if ! systemctl --user stop "$unit"; then
+    log "error" "failed to stop $name systemd unit $unit"
+    return 1
+  fi
+  systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+}
+
 stop_all() {
-  stop_one "prysm"
-  stop_one "ethrex"
+  local failed=0
+  local ethrex_unit
+  local prysm_unit
+
+  if supervisor_available; then
+    ethrex_unit="$(service_unit_name ethrex)"
+    prysm_unit="$(service_unit_name prysm)"
+    stop_systemd_one "prysm" "$prysm_unit" || failed=1
+    stop_systemd_one "ethrex" "$ethrex_unit" || failed=1
+  fi
+
+  stop_legacy_one "prysm" || failed=1
+  stop_legacy_one "ethrex" || failed=1
+  return "$failed"
+}
+
+prysm_connect_host() {
+  case "$PRYSM_HTTP_ADDR" in
+    0.0.0.0)
+      printf '127.0.0.1\n'
+      ;;
+    ::|\[::\])
+      printf '::1\n'
+      ;;
+    *)
+      printf '%s\n' "$PRYSM_HTTP_ADDR"
+      ;;
+  esac
+}
+
+print_failed_unit() {
+  local unit="$1"
+
+  systemctl --user status "$unit" --no-pager >&2 || true
+}
+
+run_all() {
+  local ethrex_unit
+  local prysm_unit
+  local prysm_host
+
+  ensure_layout
+  require_supervisor
+  ethrex_unit="$(service_unit_name ethrex)"
+  prysm_unit="$(service_unit_name prysm)"
+  prysm_host="$(prysm_connect_host)"
+
+  prepare_unit_start "$ethrex_unit"
+  prepare_unit_start "$prysm_unit"
+  reject_legacy_process "ethrex"
+  reject_legacy_process "prysm"
+  port_is_open "$AUTHRPC_CONNECT_HOST" "$AUTHRPC_PORT" \
+    && die "auth RPC port $AUTHRPC_CONNECT_HOST:$AUTHRPC_PORT is already in use by an unmanaged process"
+  port_is_open "$prysm_host" "$PRYSM_HTTP_PORT" \
+    && die "Prysm HTTP port $prysm_host:$PRYSM_HTTP_PORT is already in use by an unmanaged process"
+
+  setup
+  detect_ethrex_bin >/dev/null
+  detect_prysm_bin >/dev/null
+
+  if ! start_supervised_service "ethrex" "service-el" "$LOG_DIR/ethrex.log" "$ethrex_unit"; then
+    die "systemd failed to create $ethrex_unit"
+  fi
+  if ! wait_for_service_port "$ethrex_unit" "$AUTHRPC_CONNECT_HOST" "$AUTHRPC_PORT" "$AUTHRPC_WAIT_SECS"; then
+    log "error" "ethrex did not become ready at $AUTHRPC_CONNECT_HOST:$AUTHRPC_PORT"
+    print_failed_unit "$ethrex_unit"
+    stop_systemd_one "ethrex" "$ethrex_unit" || true
+    die "failed to start $NETWORK_NAME ethrex service"
+  fi
+
+  if ! start_supervised_service "prysm" "service-cl" "$LOG_DIR/prysm.log" "$prysm_unit"; then
+    stop_systemd_one "ethrex" "$ethrex_unit" || true
+    die "systemd failed to create $prysm_unit"
+  fi
+  if ! wait_for_service_port "$prysm_unit" "$prysm_host" "$PRYSM_HTTP_PORT" "$PRYSM_WAIT_SECS"; then
+    log "error" "prysm did not become ready at $prysm_host:$PRYSM_HTTP_PORT"
+    print_failed_unit "$prysm_unit"
+    stop_systemd_one "prysm" "$prysm_unit" || true
+    stop_systemd_one "ethrex" "$ethrex_unit" || true
+    die "failed to start $NETWORK_NAME prysm service"
+  fi
+
+  cat <<EOF
+Started $NETWORK_NAME as supervised systemd user services.
+
+Ethrex unit:    $ethrex_unit
+Prysm unit:     $prysm_unit
+Ethrex log:     $LOG_DIR/ethrex.log
+Prysm log:      $LOG_DIR/prysm.log
+
+To inspect both:
+  $SCRIPT_PATH status
+
+To stop both:
+  $SCRIPT_PATH stop
+EOF
+}
+
+status_one() {
+  local name="$1"
+  local unit="$2"
+  local host="$3"
+  local port="$4"
+  local healthy=0
+
+  printf '%s (%s)\n' "$name" "$unit"
+  if [[ "$(unit_load_state "$unit")" == "not-found" ]]; then
+    printf 'LoadState=not-found\nReadyPort=%s:%s closed\n' "$host" "$port"
+    return 1
+  fi
+
+  systemctl --user show "$unit" --no-pager \
+    --property=LoadState \
+    --property=ActiveState \
+    --property=SubState \
+    --property=MainPID \
+    --property=NRestarts \
+    --property=Result \
+    --property=MemoryCurrent
+
+  if systemctl --user is-active --quiet "$unit" && port_is_open "$host" "$port"; then
+    printf 'ReadyPort=%s:%s open\n' "$host" "$port"
+  else
+    printf 'ReadyPort=%s:%s closed\n' "$host" "$port"
+    healthy=1
+  fi
+  return "$healthy"
+}
+
+status_all() {
+  local failed=0
+  local ethrex_unit
+  local prysm_unit
+  local prysm_host
+
+  require_supervisor
+  ethrex_unit="$(service_unit_name ethrex)"
+  prysm_unit="$(service_unit_name prysm)"
+  prysm_host="$(prysm_connect_host)"
+
+  status_one "ethrex" "$ethrex_unit" "$AUTHRPC_CONNECT_HOST" "$AUTHRPC_PORT" || failed=1
+  printf '\n'
+  status_one "prysm" "$prysm_unit" "$prysm_host" "$PRYSM_HTTP_PORT" || failed=1
+  return "$failed"
 }
 
 clean() {
@@ -490,6 +847,14 @@ main() {
       expect_no_args "$cmd" "$@"
       run_cl
       ;;
+    service-el)
+      expect_no_args "$cmd" "$@"
+      exec_el
+      ;;
+    service-cl)
+      expect_no_args "$cmd" "$@"
+      exec_cl
+      ;;
     run-all)
       case "${1:-}" in
         "")
@@ -505,6 +870,10 @@ main() {
           die "unknown option for $cmd: $1"
           ;;
       esac
+      ;;
+    status)
+      expect_no_args "$cmd" "$@"
+      status_all
       ;;
     stop)
       expect_no_args "$cmd" "$@"
