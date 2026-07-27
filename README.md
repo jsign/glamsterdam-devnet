@@ -116,7 +116,7 @@ their memory use. No memory ceiling or swap is configured by this launcher.
 - `PRYSM_REF`: git ref to check out in `prysm` instead of the default `glamsterdam-devnet-7`
 - `CHECKPOINT_SYNC_URL`: override the beacon checkpoint sync endpoint
 - `AUTHRPC_WAIT_SECS`: seconds to wait for Ethrex readiness during `run-all` (60 by default)
-- `PRYSM_WAIT_SECS`: seconds to wait for Prysm readiness during `run-all` (60 by default)
+- `PRYSM_WAIT_SECS`: seconds to wait for Prysm readiness during `run-all` (300 by default)
 - `SRC_DIR`: change the default source checkout root from `./src`
 - `WORKDIR`: move metadata, data, logs and source clones elsewhere
 

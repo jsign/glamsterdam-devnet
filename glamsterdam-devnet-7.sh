@@ -51,7 +51,7 @@ ETHREX_DATADIR="${ETHREX_DATADIR:-$DATA_DIR/ethrex}"
 
 AUTHRPC_CONNECT_HOST="${AUTHRPC_CONNECT_HOST:-127.0.0.1}"
 AUTHRPC_WAIT_SECS="${AUTHRPC_WAIT_SECS:-60}"
-PRYSM_WAIT_SECS="${PRYSM_WAIT_SECS:-60}"
+PRYSM_WAIT_SECS="${PRYSM_WAIT_SECS:-300}"
 
 usage() {
   local script_name
@@ -87,7 +87,7 @@ Main environment overrides:
   PRYSM_P2P_LOCAL_IP       Local IP for Prysm P2P listeners (defaults to auto)
   CHECKPOINT_SYNC_URL     Beacon checkpoint sync endpoint
   AUTHRPC_WAIT_SECS       Ethrex readiness timeout for run-all (defaults to 60)
-  PRYSM_WAIT_SECS         Prysm readiness timeout for run-all (defaults to 60)
+  PRYSM_WAIT_SECS         Prysm readiness timeout for run-all (defaults to 300)
 EOF
 }
 
