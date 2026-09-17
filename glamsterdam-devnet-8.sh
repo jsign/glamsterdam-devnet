@@ -20,15 +20,15 @@ SRC_DIR="${SRC_DIR:-$WORKDIR/src}"
 JWT_SECRET_PATH="${JWT_SECRET_PATH:-$SECRETS_DIR/jwt.hex}"
 
 ETHREX_GIT_URL="${ETHREX_GIT_URL:-https://github.com/lambdaclass/ethrex.git}"
-PRYSM_GIT_URL="${PRYSM_GIT_URL:-https://github.com/OffchainLabs/prysm.git}"
+LIGHTHOUSE_GIT_URL="${LIGHTHOUSE_GIT_URL:-https://github.com/sigp/lighthouse.git}"
 ETHREX_REF="${ETHREX_REF:-glamsterdam-devnet-8}"
-PRYSM_REF="${PRYSM_REF:-glamsterdam-devnet-8}"
+LIGHTHOUSE_REF="${LIGHTHOUSE_REF:-glamsterdam-devnet-8}"
 
 ETHREX_SRC="${ETHREX_SRC:-$SRC_DIR/ethrex}"
-PRYSM_SRC="${PRYSM_SRC:-$SRC_DIR/prysm}"
+LIGHTHOUSE_SRC="${LIGHTHOUSE_SRC:-$SRC_DIR/lighthouse}"
 
 ETHREX_BIN="${ETHREX_BIN:-}"
-PRYSM_BIN="${PRYSM_BIN:-}"
+LIGHTHOUSE_BIN="${LIGHTHOUSE_BIN:-}"
 
 HTTP_ADDR="${HTTP_ADDR:-127.0.0.1}"
 HTTP_PORT="${HTTP_PORT:-8545}"
@@ -40,18 +40,18 @@ ETHREX_SYNCMODE="${ETHREX_SYNCMODE:-snap}"
 ETHREX_HTTP_API="${ETHREX_HTTP_API:-eth,net,web3,debug}"
 ETHREX_PRECOMPUTE_WITNESSES="${ETHREX_PRECOMPUTE_WITNESSES:-true}"
 
-PRYSM_HTTP_ADDR="${PRYSM_HTTP_ADDR:-127.0.0.1}"
-PRYSM_HTTP_PORT="${PRYSM_HTTP_PORT:-3500}"
-PRYSM_P2P_LOCAL_IP="${PRYSM_P2P_LOCAL_IP:-auto}"
-PRYSM_P2P_TCP_PORT="${PRYSM_P2P_TCP_PORT:-13000}"
-PRYSM_P2P_UDP_PORT="${PRYSM_P2P_UDP_PORT:-12000}"
-PRYSM_P2P_QUIC_PORT="${PRYSM_P2P_QUIC_PORT:-13000}"
-PRYSM_DATADIR="${PRYSM_DATADIR:-$DATA_DIR/prysm}"
+LIGHTHOUSE_HTTP_ADDR="${LIGHTHOUSE_HTTP_ADDR:-127.0.0.1}"
+LIGHTHOUSE_HTTP_PORT="${LIGHTHOUSE_HTTP_PORT:-5052}"
+LIGHTHOUSE_P2P_LISTEN_ADDR="${LIGHTHOUSE_P2P_LISTEN_ADDR:-0.0.0.0}"
+LIGHTHOUSE_P2P_TCP_PORT="${LIGHTHOUSE_P2P_TCP_PORT:-9000}"
+LIGHTHOUSE_P2P_UDP_PORT="${LIGHTHOUSE_P2P_UDP_PORT:-9000}"
+LIGHTHOUSE_P2P_QUIC_PORT="${LIGHTHOUSE_P2P_QUIC_PORT:-9001}"
+LIGHTHOUSE_DATADIR="${LIGHTHOUSE_DATADIR:-$DATA_DIR/lighthouse}"
 ETHREX_DATADIR="${ETHREX_DATADIR:-$DATA_DIR/ethrex}"
 
 AUTHRPC_CONNECT_HOST="${AUTHRPC_CONNECT_HOST:-127.0.0.1}"
 AUTHRPC_WAIT_SECS="${AUTHRPC_WAIT_SECS:-60}"
-PRYSM_WAIT_SECS="${PRYSM_WAIT_SECS:-300}"
+LIGHTHOUSE_WAIT_SECS="${LIGHTHOUSE_WAIT_SECS:-300}"
 
 usage() {
   local script_name
@@ -71,23 +71,29 @@ Usage:
   ./$script_name paths
 
 Main environment overrides:
-  WORKDIR                  Base directory for metadata, data, logs and cloned repos
-  SRC_DIR                  Base directory for source checkouts (defaults to WORKDIR/src)
-  ETHREX_SRC              Existing ethrex checkout to use instead of cloning
-  PRYSM_SRC               Existing Prysm checkout to use instead of cloning
-  ETHREX_GIT_URL          ethrex clone URL when ETHREX_SRC does not already exist
-  PRYSM_GIT_URL           Prysm clone URL when PRYSM_SRC does not already exist
-  ETHREX_REF              Git ref to checkout in ETHREX_SRC (defaults to glamsterdam-devnet-8)
-  PRYSM_REF               Git ref to checkout in PRYSM_SRC (defaults to glamsterdam-devnet-8)
-  ETHREX_BIN              Explicit ethrex binary path
-  PRYSM_BIN               Explicit Prysm beacon-chain binary path
-  ETHREX_HTTP_API         ethrex HTTP API modules (defaults to eth,net,web3,debug)
+  WORKDIR                    Base directory for metadata, data, logs and cloned repos
+  SRC_DIR                    Base directory for source checkouts (defaults to WORKDIR/src)
+  ETHREX_SRC                 Existing ethrex checkout to use instead of cloning
+  LIGHTHOUSE_SRC             Existing Lighthouse checkout to use instead of cloning
+  ETHREX_GIT_URL             ethrex clone URL when ETHREX_SRC does not already exist
+  LIGHTHOUSE_GIT_URL         Lighthouse clone URL when LIGHTHOUSE_SRC does not already exist
+  ETHREX_REF                 Git ref to checkout in ETHREX_SRC (defaults to glamsterdam-devnet-8)
+  LIGHTHOUSE_REF             Git ref to checkout in LIGHTHOUSE_SRC (defaults to glamsterdam-devnet-8)
+  ETHREX_BIN                 Explicit ethrex binary path
+  LIGHTHOUSE_BIN             Explicit Lighthouse binary path
+  LIGHTHOUSE_DATADIR         Lighthouse database directory (defaults to DATA_DIR/lighthouse)
+  LIGHTHOUSE_HTTP_ADDR       Beacon API listen address (defaults to 127.0.0.1)
+  LIGHTHOUSE_HTTP_PORT       Beacon API port (defaults to 5052)
+  ETHREX_HTTP_API            ethrex HTTP API modules (defaults to eth,net,web3,debug)
   ETHREX_PRECOMPUTE_WITNESSES
                            Enable ethrex witness precomputation (defaults to true)
-  PRYSM_P2P_LOCAL_IP       Local IP for Prysm P2P listeners (defaults to auto)
-  CHECKPOINT_SYNC_URL     Beacon checkpoint sync endpoint
-  AUTHRPC_WAIT_SECS       Ethrex readiness timeout for run-all (defaults to 60)
-  PRYSM_WAIT_SECS         Prysm readiness timeout for run-all (defaults to 300)
+  LIGHTHOUSE_P2P_LISTEN_ADDR  Lighthouse P2P listen address (defaults to 0.0.0.0)
+  LIGHTHOUSE_P2P_TCP_PORT     P2P TCP port (defaults to 9000)
+  LIGHTHOUSE_P2P_UDP_PORT     Discovery UDP port (defaults to 9000)
+  LIGHTHOUSE_P2P_QUIC_PORT    QUIC UDP port (defaults to 9001)
+  CHECKPOINT_SYNC_URL        Beacon checkpoint sync endpoint
+  AUTHRPC_WAIT_SECS          Ethrex readiness timeout for run-all (defaults to 60)
+  LIGHTHOUSE_WAIT_SECS       Lighthouse readiness timeout for run-all (defaults to 300)
 EOF
 }
 
@@ -142,7 +148,7 @@ create_jwt_secret() {
   log "info" "created jwt secret at $JWT_SECRET_PATH"
 }
 
-write_prysm_bootstrap_yaml() {
+write_bootstrap_yaml() {
   local src="$METADATA_DIR/cl/bootstrap_nodes.txt"
   local dst="$METADATA_DIR/cl/bootstrap_nodes.yaml"
 
@@ -167,7 +173,7 @@ setup() {
   download_file "$CONFIG_BASE_URL/cl/deposit_contract_block_hash.txt" "$METADATA_DIR/cl/deposit_contract_block_hash.txt"
   download_file "$CONFIG_BASE_URL/cl/bootstrap_nodes.txt" "$METADATA_DIR/cl/bootstrap_nodes.txt"
 
-  write_prysm_bootstrap_yaml
+  write_bootstrap_yaml
   create_jwt_secret
 
   log "info" "$NETWORK_NAME metadata is ready under $METADATA_DIR"
@@ -201,7 +207,7 @@ clone_repo() {
 clone_all() {
   ensure_layout
   clone_repo "ethrex" "$ETHREX_GIT_URL" "$ETHREX_SRC" "$ETHREX_REF"
-  clone_repo "prysm" "$PRYSM_GIT_URL" "$PRYSM_SRC" "$PRYSM_REF"
+  clone_repo "lighthouse" "$LIGHTHOUSE_GIT_URL" "$LIGHTHOUSE_SRC" "$LIGHTHOUSE_REF"
 }
 
 build_ethrex() {
@@ -211,25 +217,16 @@ build_ethrex() {
   cargo build --release --bin ethrex --manifest-path "$ETHREX_SRC/Cargo.toml"
 }
 
-build_prysm() {
-  local bazel_bin
-
-  [[ -d "$PRYSM_SRC" ]] || die "Prysm source directory does not exist: $PRYSM_SRC"
-  if command -v bazelisk >/dev/null 2>&1; then
-    bazel_bin="$(command -v bazelisk)"
-  elif command -v bazel >/dev/null 2>&1; then
-    bazel_bin="$(command -v bazel)"
-  else
-    die "missing required command for Prysm build: bazelisk or bazel"
-  fi
-
-  log "info" "building Prysm beacon-chain from $PRYSM_SRC"
-  (cd "$PRYSM_SRC" && "$bazel_bin" build //cmd/beacon-chain:beacon-chain)
+build_lighthouse() {
+  require_cmd cargo
+  [[ -d "$LIGHTHOUSE_SRC" ]] || die "Lighthouse source directory does not exist: $LIGHTHOUSE_SRC"
+  log "info" "building Lighthouse from $LIGHTHOUSE_SRC"
+  (cd "$LIGHTHOUSE_SRC" && cargo build --release --locked --bin lighthouse)
 }
 
 build_all() {
   build_ethrex
-  build_prysm
+  build_lighthouse
 }
 
 detect_ethrex_bin() {
@@ -252,35 +249,24 @@ detect_ethrex_bin() {
   die "ethrex binary not found; run build first or set ETHREX_BIN"
 }
 
-detect_prysm_bin() {
-  local candidate
-
-  if [[ -n "$PRYSM_BIN" ]]; then
-    [[ -x "$PRYSM_BIN" ]] || die "PRYSM_BIN is not executable: $PRYSM_BIN"
-    printf '%s\n' "$PRYSM_BIN"
+detect_lighthouse_bin() {
+  if [[ -n "$LIGHTHOUSE_BIN" ]]; then
+    [[ -x "$LIGHTHOUSE_BIN" ]] || die "LIGHTHOUSE_BIN is not executable: $LIGHTHOUSE_BIN"
+    printf '%s\n' "$LIGHTHOUSE_BIN"
     return
   fi
 
-  for candidate in \
-    "$PRYSM_SRC/bazel-bin/cmd/beacon-chain/beacon-chain_/beacon-chain" \
-    "$PRYSM_SRC/bazel-bin/cmd/beacon-chain/beacon-chain"; do
-    if [[ -x "$candidate" ]]; then
-      printf '%s\n' "$candidate"
-      return
-    fi
-  done
-
-  if command -v beacon-chain >/dev/null 2>&1; then
-    command -v beacon-chain
+  if [[ -x "$LIGHTHOUSE_SRC/target/release/lighthouse" ]]; then
+    printf '%s\n' "$LIGHTHOUSE_SRC/target/release/lighthouse"
     return
   fi
 
-  if command -v prysm-beacon-chain >/dev/null 2>&1; then
-    command -v prysm-beacon-chain
+  if command -v lighthouse >/dev/null 2>&1; then
+    command -v lighthouse
     return
   fi
 
-  die "Prysm beacon-chain binary not found; run build first or set PRYSM_BIN"
+  die "Lighthouse binary not found; run build first or set LIGHTHOUSE_BIN"
 }
 
 comma_join_file() {
@@ -305,21 +291,6 @@ port_is_open() {
   local port="$2"
 
   (exec 3<>"/dev/tcp/$host/$port") >/dev/null 2>&1
-}
-
-detect_default_ipv4() {
-  command -v ip >/dev/null 2>&1 || return 1
-
-  ip -4 route get 1.1.1.1 2>/dev/null | awk '
-    {
-      for (i = 1; i <= NF; i++) {
-        if ($i == "src") {
-          print $(i + 1)
-          exit
-        }
-      }
-    }
-  '
 }
 
 exec_el() {
@@ -351,45 +322,28 @@ run_el() {
 }
 
 exec_cl() {
-  local prysm_bin deposit_contract_block p2p_local_ip
-  local -a prysm_args
+  local lighthouse_bin
 
-  prysm_bin="$(detect_prysm_bin)"
-  deposit_contract_block="$(tr -d '[:space:]' < "$METADATA_DIR/cl/deposit_contract_block.txt")"
-  [[ -n "$deposit_contract_block" ]] || deposit_contract_block=0
-  p2p_local_ip="$PRYSM_P2P_LOCAL_IP"
+  reject_old_prysm
+  lighthouse_bin="$(detect_lighthouse_bin)"
 
-  if [[ "$p2p_local_ip" == "auto" ]]; then
-    p2p_local_ip="$(detect_default_ipv4 || true)"
-    [[ -n "$p2p_local_ip" ]] || die "could not auto-detect Prysm P2P local IP; set PRYSM_P2P_LOCAL_IP explicitly or set PRYSM_P2P_LOCAL_IP=none"
-  fi
-
-  prysm_args=(
-    --chain-config-file "$METADATA_DIR/cl/config.yaml"
-    --genesis-state "$METADATA_DIR/cl/genesis.ssz"
-    --bootstrap-node "$METADATA_DIR/cl/bootstrap_nodes.yaml"
-    --datadir "$PRYSM_DATADIR"
-    --execution-endpoint "http://${AUTHRPC_CONNECT_HOST}:${AUTHRPC_PORT}"
-    --jwt-secret "$JWT_SECRET_PATH"
-    --checkpoint-sync-url "$CHECKPOINT_SYNC_URL"
-    --contract-deployment-block "$deposit_contract_block"
-    --accept-terms-of-use
-    --http-host "$PRYSM_HTTP_ADDR"
-    --http-port "$PRYSM_HTTP_PORT"
-    --p2p-tcp-port "$PRYSM_P2P_TCP_PORT"
-    --p2p-udp-port "$PRYSM_P2P_UDP_PORT"
-    --p2p-quic-port "$PRYSM_P2P_QUIC_PORT"
-  )
-
-  if [[ -n "$p2p_local_ip" && "$p2p_local_ip" != "none" ]]; then
-    log "info" "using Prysm P2P local IP $p2p_local_ip"
-    prysm_args+=(--p2p-local-ip "$p2p_local_ip")
-  fi
-
-  exec "$prysm_bin" "${prysm_args[@]}"
+  exec "$lighthouse_bin" beacon_node \
+    --testnet-dir "$METADATA_DIR/cl" \
+    --datadir "$LIGHTHOUSE_DATADIR" \
+    --execution-endpoint "http://${AUTHRPC_CONNECT_HOST}:${AUTHRPC_PORT}" \
+    --execution-jwt "$JWT_SECRET_PATH" \
+    --checkpoint-sync-url "$CHECKPOINT_SYNC_URL" \
+    --http \
+    --http-address "$LIGHTHOUSE_HTTP_ADDR" \
+    --http-port "$LIGHTHOUSE_HTTP_PORT" \
+    --listen-address "$LIGHTHOUSE_P2P_LISTEN_ADDR" \
+    --port "$LIGHTHOUSE_P2P_TCP_PORT" \
+    --discovery-port "$LIGHTHOUSE_P2P_UDP_PORT" \
+    --quic-port "$LIGHTHOUSE_P2P_QUIC_PORT"
 }
 
 run_cl() {
+  reject_old_prysm
   setup
   exec_cl
 }
@@ -434,7 +388,7 @@ unit_active_state() {
 prepare_unit_start() {
   local unit="$1"
   local state
-  local attempt
+  local _attempt
 
   state="$(unit_active_state "$unit")"
   case "$state" in
@@ -449,7 +403,7 @@ prepare_unit_start() {
 
   systemctl --user stop "$unit" >/dev/null 2>&1 || true
   systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
-  for attempt in {1..20}; do
+  for _attempt in {1..20}; do
     [[ "$(unit_load_state "$unit")" == "not-found" ]] && return
     sleep 0.1
   done
@@ -460,32 +414,58 @@ prepare_unit_start() {
 legacy_process_matches() {
   local name="$1"
   local pid="$2"
-  local cmdline
   local executable
   local executable_name
+  local subcommand
+  local -a argv
 
   [[ "$pid" =~ ^[0-9]+$ ]] || return 1
   [[ -r "/proc/$pid/cmdline" ]] || return 1
-  cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
+  mapfile -d '' -t argv < "/proc/$pid/cmdline"
   executable="$(readlink -f -- "/proc/$pid/exe" 2>/dev/null || true)"
   executable_name="$(basename -- "$executable")"
 
   case "$name" in
     ethrex)
+      subcommand=run-el
       [[ "$executable_name" == "ethrex" \
-        || (-n "$ETHREX_BIN" && "$executable" -ef "$ETHREX_BIN") \
-        || "$cmdline" == *"$SCRIPT_PATH run-el"* ]]
+        || (-n "$ETHREX_BIN" && "$executable" -ef "$ETHREX_BIN") ]] && return 0
+      ;;
+    lighthouse)
+      subcommand=run-cl
+      [[ "$executable_name" == "lighthouse" \
+        || (-n "$LIGHTHOUSE_BIN" && "$executable" -ef "$LIGHTHOUSE_BIN") ]] && return 0
       ;;
     prysm)
+      subcommand=run-cl
       [[ "$executable_name" == "beacon-chain" \
-        || "$executable_name" == "prysm-beacon-chain" \
-        || (-n "$PRYSM_BIN" && "$executable" -ef "$PRYSM_BIN") \
-        || "$cmdline" == *"$SCRIPT_PATH run-cl"* ]]
+        || "$executable_name" == "prysm-beacon-chain" ]] && return 0
       ;;
     *)
       return 1
       ;;
   esac
+
+  # Match the launcher arguments exactly, not text inside an unrelated command.
+  [[ "$executable_name" == "bash" \
+    && "${argv[1]:-}" == "$SCRIPT_PATH" \
+    && "${argv[2]:-}" == "$subcommand" ]]
+}
+
+# Prysm is only recognized to prevent competing CLs and stop pre-migration services.
+reject_old_prysm() {
+  local unit state
+
+  if supervisor_available; then
+    unit="$(service_unit_name prysm)"
+    state="$(unit_active_state "$unit")"
+    case "$state" in
+      active|activating|deactivating|reloading)
+        die "old Prysm unit $unit is still $state; run '$SCRIPT_PATH stop' first"
+        ;;
+    esac
+  fi
+  reject_legacy_process "prysm"
 }
 
 reject_legacy_process() {
@@ -575,13 +555,13 @@ start_supervised_service() {
   local -a env_names=(
     WORKDIR NETWORK_NAME CONFIG_BASE_URL CHECKPOINT_SYNC_URL
     METADATA_DIR SECRETS_DIR DATA_DIR LOG_DIR RUN_DIR SRC_DIR JWT_SECRET_PATH
-    ETHREX_GIT_URL PRYSM_GIT_URL ETHREX_REF PRYSM_REF ETHREX_SRC PRYSM_SRC
-    ETHREX_BIN PRYSM_BIN HTTP_ADDR HTTP_PORT AUTHRPC_ADDR AUTHRPC_PORT
+    ETHREX_GIT_URL LIGHTHOUSE_GIT_URL ETHREX_REF LIGHTHOUSE_REF ETHREX_SRC LIGHTHOUSE_SRC
+    ETHREX_BIN LIGHTHOUSE_BIN HTTP_ADDR HTTP_PORT AUTHRPC_ADDR AUTHRPC_PORT
     ETHREX_P2P_PORT ETHREX_DISCOVERY_PORT ETHREX_SYNCMODE ETHREX_HTTP_API
-    ETHREX_PRECOMPUTE_WITNESSES PRYSM_HTTP_ADDR PRYSM_HTTP_PORT
-    PRYSM_P2P_LOCAL_IP PRYSM_P2P_TCP_PORT PRYSM_P2P_UDP_PORT
-    PRYSM_P2P_QUIC_PORT PRYSM_DATADIR ETHREX_DATADIR AUTHRPC_CONNECT_HOST
-    AUTHRPC_WAIT_SECS PRYSM_WAIT_SECS
+    ETHREX_PRECOMPUTE_WITNESSES LIGHTHOUSE_HTTP_ADDR LIGHTHOUSE_HTTP_PORT
+    LIGHTHOUSE_P2P_LISTEN_ADDR LIGHTHOUSE_P2P_TCP_PORT LIGHTHOUSE_P2P_UDP_PORT
+    LIGHTHOUSE_P2P_QUIC_PORT LIGHTHOUSE_DATADIR ETHREX_DATADIR AUTHRPC_CONNECT_HOST
+    AUTHRPC_WAIT_SECS LIGHTHOUSE_WAIT_SECS
   )
 
   log_file="$(absolute_log_path "$log_file")"
@@ -656,22 +636,24 @@ stop_systemd_one() {
 stop_all() {
   local failed=0
   local ethrex_unit
-  local prysm_unit
+  local lighthouse_unit
 
   if supervisor_available; then
     ethrex_unit="$(service_unit_name ethrex)"
-    prysm_unit="$(service_unit_name prysm)"
-    stop_systemd_one "prysm" "$prysm_unit" || failed=1
+    lighthouse_unit="$(service_unit_name lighthouse)"
+    stop_systemd_one "lighthouse" "$lighthouse_unit" || failed=1
+    stop_systemd_one "prysm" "$(service_unit_name prysm)" || failed=1
     stop_systemd_one "ethrex" "$ethrex_unit" || failed=1
   fi
 
+  stop_legacy_one "lighthouse" || failed=1
   stop_legacy_one "prysm" || failed=1
   stop_legacy_one "ethrex" || failed=1
   return "$failed"
 }
 
-prysm_connect_host() {
-  case "$PRYSM_HTTP_ADDR" in
+lighthouse_connect_host() {
+  case "$LIGHTHOUSE_HTTP_ADDR" in
     0.0.0.0)
       printf '127.0.0.1\n'
       ;;
@@ -679,7 +661,7 @@ prysm_connect_host() {
       printf '::1\n'
       ;;
     *)
-      printf '%s\n' "$PRYSM_HTTP_ADDR"
+      printf '%s\n' "$LIGHTHOUSE_HTTP_ADDR"
       ;;
   esac
 }
@@ -692,27 +674,28 @@ print_failed_unit() {
 
 run_all() {
   local ethrex_unit
-  local prysm_unit
-  local prysm_host
+  local lighthouse_unit
+  local lighthouse_host
 
   ensure_layout
   require_supervisor
   ethrex_unit="$(service_unit_name ethrex)"
-  prysm_unit="$(service_unit_name prysm)"
-  prysm_host="$(prysm_connect_host)"
+  lighthouse_unit="$(service_unit_name lighthouse)"
+  lighthouse_host="$(lighthouse_connect_host)"
 
+  reject_old_prysm
   prepare_unit_start "$ethrex_unit"
-  prepare_unit_start "$prysm_unit"
+  prepare_unit_start "$lighthouse_unit"
   reject_legacy_process "ethrex"
-  reject_legacy_process "prysm"
+  reject_legacy_process "lighthouse"
   port_is_open "$AUTHRPC_CONNECT_HOST" "$AUTHRPC_PORT" \
     && die "auth RPC port $AUTHRPC_CONNECT_HOST:$AUTHRPC_PORT is already in use by an unmanaged process"
-  port_is_open "$prysm_host" "$PRYSM_HTTP_PORT" \
-    && die "Prysm HTTP port $prysm_host:$PRYSM_HTTP_PORT is already in use by an unmanaged process"
+  port_is_open "$lighthouse_host" "$LIGHTHOUSE_HTTP_PORT" \
+    && die "Lighthouse HTTP port $lighthouse_host:$LIGHTHOUSE_HTTP_PORT is already in use by an unmanaged process"
 
   setup
   detect_ethrex_bin >/dev/null
-  detect_prysm_bin >/dev/null
+  detect_lighthouse_bin >/dev/null
 
   if ! start_supervised_service "ethrex" "service-el" "$LOG_DIR/ethrex.log" "$ethrex_unit"; then
     die "systemd failed to create $ethrex_unit"
@@ -724,25 +707,25 @@ run_all() {
     die "failed to start $NETWORK_NAME ethrex service"
   fi
 
-  if ! start_supervised_service "prysm" "service-cl" "$LOG_DIR/prysm.log" "$prysm_unit"; then
+  if ! start_supervised_service "lighthouse" "service-cl" "$LOG_DIR/lighthouse.log" "$lighthouse_unit"; then
     stop_systemd_one "ethrex" "$ethrex_unit" || true
-    die "systemd failed to create $prysm_unit"
+    die "systemd failed to create $lighthouse_unit"
   fi
-  if ! wait_for_service_port "$prysm_unit" "$prysm_host" "$PRYSM_HTTP_PORT" "$PRYSM_WAIT_SECS"; then
-    log "error" "prysm did not become ready at $prysm_host:$PRYSM_HTTP_PORT"
-    print_failed_unit "$prysm_unit"
-    stop_systemd_one "prysm" "$prysm_unit" || true
+  if ! wait_for_service_port "$lighthouse_unit" "$lighthouse_host" "$LIGHTHOUSE_HTTP_PORT" "$LIGHTHOUSE_WAIT_SECS"; then
+    log "error" "lighthouse did not become ready at $lighthouse_host:$LIGHTHOUSE_HTTP_PORT"
+    print_failed_unit "$lighthouse_unit"
+    stop_systemd_one "lighthouse" "$lighthouse_unit" || true
     stop_systemd_one "ethrex" "$ethrex_unit" || true
-    die "failed to start $NETWORK_NAME prysm service"
+    die "failed to start $NETWORK_NAME lighthouse service"
   fi
 
   cat <<EOF
 Started $NETWORK_NAME as supervised systemd user services.
 
-Ethrex unit:    $ethrex_unit
-Prysm unit:     $prysm_unit
-Ethrex log:     $LOG_DIR/ethrex.log
-Prysm log:      $LOG_DIR/prysm.log
+Ethrex unit:     $ethrex_unit
+Lighthouse unit: $lighthouse_unit
+Ethrex log:      $LOG_DIR/ethrex.log
+Lighthouse log:  $LOG_DIR/lighthouse.log
 
 To inspect both:
   $SCRIPT_PATH status
@@ -786,22 +769,22 @@ status_one() {
 status_all() {
   local failed=0
   local ethrex_unit
-  local prysm_unit
-  local prysm_host
+  local lighthouse_unit
+  local lighthouse_host
 
   require_supervisor
   ethrex_unit="$(service_unit_name ethrex)"
-  prysm_unit="$(service_unit_name prysm)"
-  prysm_host="$(prysm_connect_host)"
+  lighthouse_unit="$(service_unit_name lighthouse)"
+  lighthouse_host="$(lighthouse_connect_host)"
 
   status_one "ethrex" "$ethrex_unit" "$AUTHRPC_CONNECT_HOST" "$AUTHRPC_PORT" || failed=1
   printf '\n'
-  status_one "prysm" "$prysm_unit" "$prysm_host" "$PRYSM_HTTP_PORT" || failed=1
+  status_one "lighthouse" "$lighthouse_unit" "$lighthouse_host" "$LIGHTHOUSE_HTTP_PORT" || failed=1
   return "$failed"
 }
 
 clean() {
-  stop_all
+  stop_all || die "could not stop all clients; runtime data was not removed"
   rm -rf "$METADATA_DIR" "$SECRETS_DIR" "$DATA_DIR" "$LOG_DIR" "$RUN_DIR"
   log "info" "removed metadata, secrets, data, logs and pid files under $WORKDIR"
 }
@@ -815,7 +798,7 @@ DATA_DIR=$DATA_DIR
 LOG_DIR=$LOG_DIR
 RUN_DIR=$RUN_DIR
 ETHREX_SRC=$ETHREX_SRC
-PRYSM_SRC=$PRYSM_SRC
+LIGHTHOUSE_SRC=$LIGHTHOUSE_SRC
 JWT_SECRET_PATH=$JWT_SECRET_PATH
 CONFIG_BASE_URL=$CONFIG_BASE_URL
 CHECKPOINT_SYNC_URL=$CHECKPOINT_SYNC_URL
@@ -897,4 +880,6 @@ main() {
   esac
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

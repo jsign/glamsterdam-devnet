@@ -9,3 +9,6 @@ secrets/
 
 # Source repos (cloned by the script)
 src/
+
+# Python launcher test cache
+__pycache__/
