@@ -21,7 +21,7 @@ JWT_SECRET_PATH="${JWT_SECRET_PATH:-$SECRETS_DIR/jwt.hex}"
 ETHREX_GIT_URL="${ETHREX_GIT_URL:-https://github.com/lambdaclass/ethrex.git}"
 LIGHTHOUSE_GIT_URL="${LIGHTHOUSE_GIT_URL:-https://github.com/sigp/lighthouse.git}"
 # Glamsterdam-ready releases for Sepolia (activation 2026-10-06 13:53:36 UTC).
-ETHREX_REF="${ETHREX_REF:-v29.0.0}"
+ETHREX_REF="${ETHREX_REF:-v29.0.1}"
 LIGHTHOUSE_REF="${LIGHTHOUSE_REF:-v8.3.0-rc.0}"
 
 ETHREX_SRC="${ETHREX_SRC:-$SRC_DIR/ethrex}"
@@ -78,7 +78,7 @@ Main environment overrides:
   LIGHTHOUSE_SRC             Existing Lighthouse checkout to use instead of cloning
   ETHREX_GIT_URL             ethrex clone URL when ETHREX_SRC does not already exist
   LIGHTHOUSE_GIT_URL         Lighthouse clone URL when LIGHTHOUSE_SRC does not already exist
-  ETHREX_REF                 Git ref to checkout in ETHREX_SRC (defaults to v29.0.0)
+  ETHREX_REF                 Git ref to checkout in ETHREX_SRC (defaults to v29.0.1)
   LIGHTHOUSE_REF             Git ref to checkout in LIGHTHOUSE_SRC (defaults to v8.3.0-rc.0)
   ETHREX_BIN                 Explicit ethrex binary path
   LIGHTHOUSE_BIN             Explicit Lighthouse binary path

@@ -6,7 +6,7 @@ Glamsterdam-ready release from source, using checkouts under `./src` by default:
 
 | Client | Release |
 | --- | --- |
-| Ethrex | `v29.0.0` |
+| Ethrex | `v29.0.1` |
 | Lighthouse | `v8.3.0-rc.0` |
 
 Glamsterdam activates on Sepolia at epoch 353024 (slot 11296768),
@@ -150,7 +150,7 @@ Available environment overrides:
 - `LIGHTHOUSE_P2P_TCP_PORT`: P2P TCP port (`9000` by default)
 - `LIGHTHOUSE_P2P_UDP_PORT`: discovery UDP port (`9000` by default)
 - `LIGHTHOUSE_P2P_QUIC_PORT`: QUIC UDP port (`9001` by default)
-- `ETHREX_REF`: git ref to check out in `ethrex` instead of the default `v29.0.0`
+- `ETHREX_REF`: git ref to check out in `ethrex` instead of the default `v29.0.1`
 - `LIGHTHOUSE_REF`: git ref to check out in `lighthouse` instead of the default `v8.3.0-rc.0`
 - `CHECKPOINT_SYNC_URL`: beacon checkpoint sync endpoint (`https://checkpoint-sync.sepolia.ethpandaops.io` by default)
 - `AUTHRPC_WAIT_SECS`: seconds to wait for Ethrex readiness during `run-all` (60 by default)
@@ -205,5 +205,5 @@ start real clients or change the current installation.
 ## Upstream references
 
 - Announcement: https://blog.ethereum.org/2026/09/17/glamsterdam-testnet-announcement
-- Ethrex release: https://github.com/lambdaclass/ethrex/releases/tag/v29.0.0
+- Ethrex release: https://github.com/lambdaclass/ethrex/releases/tag/v29.0.1
 - Lighthouse release: https://github.com/sigp/lighthouse/releases/tag/v8.3.0-rc.0
