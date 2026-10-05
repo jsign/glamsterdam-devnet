@@ -6,11 +6,10 @@ SCRIPT_PATH="$SCRIPT_DIR/$(basename -- "${BASH_SOURCE[0]}")"
 LAUNCH_DIR="$PWD"
 WORKDIR="${WORKDIR:-$SCRIPT_DIR}"
 
-NETWORK_NAME="${NETWORK_NAME:-glamsterdam-devnet-8}"
-CONFIG_BASE_URL="${CONFIG_BASE_URL:-https://config.glamsterdam-devnet-8.ethpandaops.io}"
-CHECKPOINT_SYNC_URL="${CHECKPOINT_SYNC_URL:-https://checkpoint-sync.glamsterdam-devnet-8.ethpandaops.io}"
+# Both clients ship Sepolia's genesis, bootnodes and fork schedule.
+NETWORK_NAME="sepolia"
+CHECKPOINT_SYNC_URL="${CHECKPOINT_SYNC_URL:-https://checkpoint-sync.sepolia.ethpandaops.io}"
 
-METADATA_DIR="${METADATA_DIR:-$WORKDIR/metadata}"
 SECRETS_DIR="${SECRETS_DIR:-$WORKDIR/secrets}"
 DATA_DIR="${DATA_DIR:-$WORKDIR/data}"
 LOG_DIR="${LOG_DIR:-$WORKDIR/logs}"
@@ -21,8 +20,9 @@ JWT_SECRET_PATH="${JWT_SECRET_PATH:-$SECRETS_DIR/jwt.hex}"
 
 ETHREX_GIT_URL="${ETHREX_GIT_URL:-https://github.com/lambdaclass/ethrex.git}"
 LIGHTHOUSE_GIT_URL="${LIGHTHOUSE_GIT_URL:-https://github.com/sigp/lighthouse.git}"
-ETHREX_REF="${ETHREX_REF:-glamsterdam-devnet-8}"
-LIGHTHOUSE_REF="${LIGHTHOUSE_REF:-glamsterdam-devnet-8}"
+# Glamsterdam-ready releases for Sepolia (activation 2026-10-06 13:53:36 UTC).
+ETHREX_REF="${ETHREX_REF:-v29.0.0}"
+LIGHTHOUSE_REF="${LIGHTHOUSE_REF:-v8.3.0-rc.0}"
 
 ETHREX_SRC="${ETHREX_SRC:-$SRC_DIR/ethrex}"
 LIGHTHOUSE_SRC="${LIGHTHOUSE_SRC:-$SRC_DIR/lighthouse}"
@@ -71,14 +71,15 @@ Usage:
   ./$script_name paths
 
 Main environment overrides:
-  WORKDIR                    Base directory for metadata, data, logs and cloned repos
+  WORKDIR                    Base directory for secrets, data, logs and cloned repos
+  DATA_DIR                   Base directory for chain data (defaults to WORKDIR/data)
   SRC_DIR                    Base directory for source checkouts (defaults to WORKDIR/src)
   ETHREX_SRC                 Existing ethrex checkout to use instead of cloning
   LIGHTHOUSE_SRC             Existing Lighthouse checkout to use instead of cloning
   ETHREX_GIT_URL             ethrex clone URL when ETHREX_SRC does not already exist
   LIGHTHOUSE_GIT_URL         Lighthouse clone URL when LIGHTHOUSE_SRC does not already exist
-  ETHREX_REF                 Git ref to checkout in ETHREX_SRC (defaults to glamsterdam-devnet-8)
-  LIGHTHOUSE_REF             Git ref to checkout in LIGHTHOUSE_SRC (defaults to glamsterdam-devnet-8)
+  ETHREX_REF                 Git ref to checkout in ETHREX_SRC (defaults to v29.0.0)
+  LIGHTHOUSE_REF             Git ref to checkout in LIGHTHOUSE_SRC (defaults to v8.3.0-rc.0)
   ETHREX_BIN                 Explicit ethrex binary path
   LIGHTHOUSE_BIN             Explicit Lighthouse binary path
   LIGHTHOUSE_DATADIR         Lighthouse database directory (defaults to DATA_DIR/lighthouse)
@@ -119,21 +120,11 @@ expect_no_args() {
 
 ensure_layout() {
   mkdir -p \
-    "$METADATA_DIR/el" \
-    "$METADATA_DIR/cl" \
     "$SECRETS_DIR" \
     "$DATA_DIR" \
     "$LOG_DIR" \
     "$RUN_DIR" \
     "$SRC_DIR"
-}
-
-download_file() {
-  local url="$1"
-  local out="$2"
-
-  log "info" "downloading $url"
-  curl -fsSL "$url" -o "$out"
 }
 
 create_jwt_secret() {
@@ -148,35 +139,9 @@ create_jwt_secret() {
   log "info" "created jwt secret at $JWT_SECRET_PATH"
 }
 
-write_bootstrap_yaml() {
-  local src="$METADATA_DIR/cl/bootstrap_nodes.txt"
-  local dst="$METADATA_DIR/cl/bootstrap_nodes.yaml"
-
-  : > "$dst"
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ -z "$line" ]] && continue
-    printf -- '- "%s"\n' "$line" >> "$dst"
-  done < "$src"
-}
-
 setup() {
-  require_cmd curl
   ensure_layout
-
-  download_file "$CONFIG_BASE_URL/el/genesis.json" "$METADATA_DIR/el/genesis.json"
-  download_file "$CONFIG_BASE_URL/el/enodes.txt" "$METADATA_DIR/el/enodes.txt"
-
-  download_file "$CONFIG_BASE_URL/cl/config.yaml" "$METADATA_DIR/cl/config.yaml"
-  download_file "$CONFIG_BASE_URL/cl/genesis.ssz" "$METADATA_DIR/cl/genesis.ssz"
-  download_file "$CONFIG_BASE_URL/cl/deposit_contract.txt" "$METADATA_DIR/cl/deposit_contract.txt"
-  download_file "$CONFIG_BASE_URL/cl/deposit_contract_block.txt" "$METADATA_DIR/cl/deposit_contract_block.txt"
-  download_file "$CONFIG_BASE_URL/cl/deposit_contract_block_hash.txt" "$METADATA_DIR/cl/deposit_contract_block_hash.txt"
-  download_file "$CONFIG_BASE_URL/cl/bootstrap_nodes.txt" "$METADATA_DIR/cl/bootstrap_nodes.txt"
-
-  write_bootstrap_yaml
   create_jwt_secret
-
-  log "info" "$NETWORK_NAME metadata is ready under $METADATA_DIR"
 }
 
 clone_repo() {
@@ -214,7 +179,8 @@ build_ethrex() {
   require_cmd cargo
   [[ -d "$ETHREX_SRC" ]] || die "ethrex source directory does not exist: $ETHREX_SRC"
   log "info" "building ethrex from $ETHREX_SRC"
-  cargo build --release --bin ethrex --manifest-path "$ETHREX_SRC/Cargo.toml"
+  # Build inside the checkout so rustup honors its rust-toolchain.toml.
+  (cd "$ETHREX_SRC" && cargo build --release --locked --bin ethrex)
 }
 
 build_lighthouse() {
@@ -269,23 +235,6 @@ detect_lighthouse_bin() {
   die "Lighthouse binary not found; run build first or set LIGHTHOUSE_BIN"
 }
 
-comma_join_file() {
-  local file="$1"
-
-  awk '
-    NF {
-      if (seen) {
-        printf ","
-      }
-      printf "%s", $0
-      seen = 1
-    }
-    END {
-      printf "\n"
-    }
-  ' "$file"
-}
-
 port_is_open() {
   local host="$1"
   local port="$2"
@@ -294,17 +243,16 @@ port_is_open() {
 }
 
 exec_el() {
-  local ethrex_bin bootnodes
+  local ethrex_bin
 
   ethrex_bin="$(detect_ethrex_bin)"
-  bootnodes="$(comma_join_file "$METADATA_DIR/el/enodes.txt")"
 
   export ETHREX_HTTP_API
   export ETHREX_PRECOMPUTE_WITNESSES
 
+  # ethrex appends the network name to --datadir for public networks.
   exec "$ethrex_bin" \
-    --network "$METADATA_DIR/el/genesis.json" \
-    --bootnodes "$bootnodes" \
+    --network "$NETWORK_NAME" \
     --syncmode "$ETHREX_SYNCMODE" \
     --datadir "$ETHREX_DATADIR" \
     --http.addr "$HTTP_ADDR" \
@@ -324,11 +272,10 @@ run_el() {
 exec_cl() {
   local lighthouse_bin
 
-  reject_old_prysm
   lighthouse_bin="$(detect_lighthouse_bin)"
 
   exec "$lighthouse_bin" beacon_node \
-    --testnet-dir "$METADATA_DIR/cl" \
+    --network "$NETWORK_NAME" \
     --datadir "$LIGHTHOUSE_DATADIR" \
     --execution-endpoint "http://${AUTHRPC_CONNECT_HOST}:${AUTHRPC_PORT}" \
     --execution-jwt "$JWT_SECRET_PATH" \
@@ -343,7 +290,6 @@ exec_cl() {
 }
 
 run_cl() {
-  reject_old_prysm
   setup
   exec_cl
 }
@@ -436,11 +382,6 @@ legacy_process_matches() {
       [[ "$executable_name" == "lighthouse" \
         || (-n "$LIGHTHOUSE_BIN" && "$executable" -ef "$LIGHTHOUSE_BIN") ]] && return 0
       ;;
-    prysm)
-      subcommand=run-cl
-      [[ "$executable_name" == "beacon-chain" \
-        || "$executable_name" == "prysm-beacon-chain" ]] && return 0
-      ;;
     *)
       return 1
       ;;
@@ -450,22 +391,6 @@ legacy_process_matches() {
   [[ "$executable_name" == "bash" \
     && "${argv[1]:-}" == "$SCRIPT_PATH" \
     && "${argv[2]:-}" == "$subcommand" ]]
-}
-
-# Prysm is only recognized to prevent competing CLs and stop pre-migration services.
-reject_old_prysm() {
-  local unit state
-
-  if supervisor_available; then
-    unit="$(service_unit_name prysm)"
-    state="$(unit_active_state "$unit")"
-    case "$state" in
-      active|activating|deactivating|reloading)
-        die "old Prysm unit $unit is still $state; run '$SCRIPT_PATH stop' first"
-        ;;
-    esac
-  fi
-  reject_legacy_process "prysm"
 }
 
 reject_legacy_process() {
@@ -553,8 +478,8 @@ start_supervised_service() {
   local env_name
   local -a systemd_args
   local -a env_names=(
-    WORKDIR NETWORK_NAME CONFIG_BASE_URL CHECKPOINT_SYNC_URL
-    METADATA_DIR SECRETS_DIR DATA_DIR LOG_DIR RUN_DIR SRC_DIR JWT_SECRET_PATH
+    WORKDIR CHECKPOINT_SYNC_URL
+    SECRETS_DIR DATA_DIR LOG_DIR RUN_DIR SRC_DIR JWT_SECRET_PATH
     ETHREX_GIT_URL LIGHTHOUSE_GIT_URL ETHREX_REF LIGHTHOUSE_REF ETHREX_SRC LIGHTHOUSE_SRC
     ETHREX_BIN LIGHTHOUSE_BIN HTTP_ADDR HTTP_PORT AUTHRPC_ADDR AUTHRPC_PORT
     ETHREX_P2P_PORT ETHREX_DISCOVERY_PORT ETHREX_SYNCMODE ETHREX_HTTP_API
@@ -642,12 +567,10 @@ stop_all() {
     ethrex_unit="$(service_unit_name ethrex)"
     lighthouse_unit="$(service_unit_name lighthouse)"
     stop_systemd_one "lighthouse" "$lighthouse_unit" || failed=1
-    stop_systemd_one "prysm" "$(service_unit_name prysm)" || failed=1
     stop_systemd_one "ethrex" "$ethrex_unit" || failed=1
   fi
 
   stop_legacy_one "lighthouse" || failed=1
-  stop_legacy_one "prysm" || failed=1
   stop_legacy_one "ethrex" || failed=1
   return "$failed"
 }
@@ -683,7 +606,6 @@ run_all() {
   lighthouse_unit="$(service_unit_name lighthouse)"
   lighthouse_host="$(lighthouse_connect_host)"
 
-  reject_old_prysm
   prepare_unit_start "$ethrex_unit"
   prepare_unit_start "$lighthouse_unit"
   reject_legacy_process "ethrex"
@@ -785,14 +707,13 @@ status_all() {
 
 clean() {
   stop_all || die "could not stop all clients; runtime data was not removed"
-  rm -rf "$METADATA_DIR" "$SECRETS_DIR" "$DATA_DIR" "$LOG_DIR" "$RUN_DIR"
-  log "info" "removed metadata, secrets, data, logs and pid files under $WORKDIR"
+  rm -rf "$SECRETS_DIR" "$DATA_DIR" "$LOG_DIR" "$RUN_DIR"
+  log "info" "removed secrets, data, logs and pid files"
 }
 
 print_paths() {
   cat <<EOF
 WORKDIR=$WORKDIR
-METADATA_DIR=$METADATA_DIR
 SECRETS_DIR=$SECRETS_DIR
 DATA_DIR=$DATA_DIR
 LOG_DIR=$LOG_DIR
@@ -800,7 +721,6 @@ RUN_DIR=$RUN_DIR
 ETHREX_SRC=$ETHREX_SRC
 LIGHTHOUSE_SRC=$LIGHTHOUSE_SRC
 JWT_SECRET_PATH=$JWT_SECRET_PATH
-CONFIG_BASE_URL=$CONFIG_BASE_URL
 CHECKPOINT_SYNC_URL=$CHECKPOINT_SYNC_URL
 EOF
 }

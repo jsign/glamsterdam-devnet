@@ -10,7 +10,7 @@ import tempfile
 import unittest
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "glamsterdam-devnet-8.sh"
+SCRIPT = Path(__file__).resolve().parents[1] / "sepolia.sh"
 
 # One fake executable backs the external commands used by the launcher. All
 # state stays outside the runtime directories so clean() can be inspected.
@@ -23,10 +23,7 @@ with (root / "calls").open("a") as f:
     f.write(json.dumps([name, args, os.getcwd()]) + "\n")
 state_file = root / "units.json"
 state = json.loads(state_file.read_text()) if state_file.exists() else {}
-if name == "curl":
-    out = pathlib.Path(args[args.index("-o") + 1])
-    out.write_text("enr:first\n\nenr:second\n" if out.name == "bootstrap_nodes.txt" else "0\n")
-elif name == "systemd-escape":
+if name == "systemd-escape":
     print(args[-1])
 elif name == "systemd-run":
     unit = next(a.split("=", 1)[1] for a in args if a.startswith("--unit="))
@@ -61,7 +58,7 @@ class LauncherTests(unittest.TestCase):
         self.work = self.root / "runtime with spaces"
         self.bin = self.root / "bin"
         self.bin.mkdir()
-        for name in ("curl", "systemctl", "systemd-run", "systemd-escape", "cargo", "git"):
+        for name in ("systemctl", "systemd-run", "systemd-escape", "cargo", "git"):
             self.executable(self.bin / name, STUB)
         # Avoid inherited overrides pointing tests at a real installation.
         self.env = {
@@ -93,7 +90,7 @@ class LauncherTests(unittest.TestCase):
         return [row for row in map(json.loads, path.read_text().splitlines()) if row[0] == name] if path.exists() else []
 
     def set_units(self, **states):
-        units = {f"glamsterdam-devnet-8-{name}.service": state for name, state in states.items()}
+        units = {f"sepolia-{name}.service": state for name, state in states.items()}
         (self.root / "units.json").write_text(json.dumps(units))
 
     def fake_clients(self):
@@ -125,19 +122,28 @@ port_is_open() {
 
     def test_setup_and_foreground_arguments(self):
         self.fake_clients()
+        self.run_shell("run_el")
+        self.assertEqual(self.calls("ethrex")[0][1], [
+            "--network", "sepolia", "--syncmode", "snap",
+            "--datadir", str(self.work / "data/ethrex"),
+            "--http.addr", "127.0.0.1", "--http.port", "8545",
+            "--authrpc.addr", "127.0.0.1", "--authrpc.port", "8551",
+            "--authrpc.jwtsecret", str(self.work / "secrets/jwt.hex"),
+            "--p2p.port", "30303", "--discovery.port", "30303",
+        ])
         self.run_shell("run_cl")
         args = self.calls("lighthouse")[0][1]
         self.assertEqual(args, [
-            "beacon_node", "--testnet-dir", str(self.work / "metadata/cl"),
+            "beacon_node", "--network", "sepolia",
             "--datadir", str(self.work / "data/lighthouse"),
             "--execution-endpoint", "http://127.0.0.1:8551",
             "--execution-jwt", str(self.work / "secrets/jwt.hex"),
-            "--checkpoint-sync-url", "https://checkpoint-sync.glamsterdam-devnet-8.ethpandaops.io",
+            "--checkpoint-sync-url", "https://checkpoint-sync.sepolia.ethpandaops.io",
             "--http", "--http-address", "127.0.0.1", "--http-port", "5052",
             "--listen-address", "0.0.0.0", "--port", "9000",
             "--discovery-port", "9000", "--quic-port", "9001",
         ])
-        self.assertEqual((self.work / "metadata/cl/bootstrap_nodes.yaml").read_text(), '- "enr:first"\n- "enr:second"\n')
+        self.assertFalse((self.work / "metadata").exists())
         jwt = (self.work / "secrets/jwt.hex").read_text()
         self.assertRegex(jwt, r"^[0-9a-f]{64}\n$")
         self.run_shell("setup")
@@ -147,12 +153,15 @@ port_is_open() {
         self.run_shell("clone_all")
         calls = self.calls("git")
         self.assertIn(["clone", "https://github.com/sigp/lighthouse.git", str(self.work / "src/lighthouse")], [c[1] for c in calls])
-        self.assertIn(["-C", str(self.work / "src/lighthouse"), "checkout", "glamsterdam-devnet-8"], [c[1] for c in calls])
+        self.assertIn(["-C", str(self.work / "src/ethrex"), "checkout", "v29.0.0"], [c[1] for c in calls])
+        self.assertIn(["-C", str(self.work / "src/lighthouse"), "checkout", "v8.3.0-rc.0"], [c[1] for c in calls])
         self.fake_clients()
         self.run_shell("build_all")
-        call = self.calls("cargo")[-1]
-        self.assertEqual(call[1], ["build", "--release", "--locked", "--bin", "lighthouse"])
-        self.assertEqual(call[2], str(self.work / "src/lighthouse"))
+        # Each build runs inside its checkout so rust-toolchain.toml applies.
+        self.assertEqual([(c[1], c[2]) for c in self.calls("cargo")], [
+            (["build", "--release", "--locked", "--bin", "ethrex"], str(self.work / "src/ethrex")),
+            (["build", "--release", "--locked", "--bin", "lighthouse"], str(self.work / "src/lighthouse")),
+        ])
 
     def test_runtime_overrides(self):
         client = self.executable(self.root / "custom-lighthouse")
@@ -185,7 +194,7 @@ port_is_open() {
         self.assertEqual(len(starts), 2)
         args = starts[1][1]
         for expected in (
-            "--unit=glamsterdam-devnet-8-lighthouse.service",
+            "--unit=sepolia-lighthouse.service",
             "--setenv=LIGHTHOUSE_HTTP_PORT=6052",
             "--setenv=LIGHTHOUSE_P2P_LISTEN_ADDR=192.0.2.1",
             "--setenv=LIGHTHOUSE_WAIT_SECS=1",
@@ -196,7 +205,6 @@ port_is_open() {
         ):
             self.assertIn(expected, args)
         self.assertEqual(args[-2:], [str(SCRIPT), "service-cl"])
-        self.assertFalse(any("PRYSM_" in a for a in args))
         self.assertEqual(json.loads((self.root / "units.json").read_text()), {})
 
     def test_start_and_readiness_failures_stop_started_services(self):
@@ -207,41 +215,31 @@ port_is_open() {
                 self.supervised(success=False, AUTHRPC_WAIT_SECS="1", LIGHTHOUSE_WAIT_SECS="1", **env)
                 self.assertEqual(json.loads((self.root / "units.json").read_text()), {})
 
-    def test_old_prysm_blocks_all_cl_start_paths(self):
-        for command in ("run_cl", "exec_cl", "run_all"):
-            for state in ("active", "activating", "deactivating", "reloading"):
-                with self.subTest(command=command, state=state):
-                    self.set_units(prysm=state)
-                    result = self.run_shell(command, success=False)
-                    self.assertIn("old Prysm unit", result.stderr)
-        self.assertFalse(self.calls("curl"))
-        self.assertFalse(self.calls("systemd-run"))
-
     def test_clean_requires_successful_shutdown_and_preserves_sources(self):
         self.fake_clients()
         self.run_shell("setup")
-        old_source = self.work / "src/prysm/keep"
-        old_source.parent.mkdir()
-        old_source.touch()
-        self.set_units(ethrex="active", lighthouse="active", prysm="active")
-        self.run_shell("clean", success=False, FAIL_STOP="prysm")
+        other_source = self.work / "src/other/keep"
+        other_source.parent.mkdir()
+        other_source.touch()
+        self.set_units(ethrex="active", lighthouse="active")
+        self.run_shell("clean", success=False, FAIL_STOP="lighthouse")
         self.assertTrue((self.work / "secrets/jwt.hex").exists())
         self.run_shell("clean")
-        for directory in ("metadata", "secrets", "data", "logs", "run"):
+        for directory in ("secrets", "data", "logs", "run"):
             self.assertFalse((self.work / directory).exists())
-        self.assertTrue(old_source.exists())
+        self.assertTrue(other_source.exists())
         self.assertTrue((self.work / "src/lighthouse").exists())
 
-    def test_legacy_prysm_and_unrelated_pid(self):
+    def test_legacy_lighthouse_and_unrelated_pid(self):
         self.run_shell("ensure_layout")
-        executable = self.root / "beacon-chain"
+        executable = self.root / "lighthouse"
         shutil.copyfile("/bin/sleep", executable)
         executable.chmod(0o755)
         process = subprocess.Popen([str(executable), "60"])
         self.addCleanup(lambda: process.poll() is None and process.kill())
-        pid_file = self.work / "run/prysm.pid"
+        pid_file = self.work / "run/lighthouse.pid"
         pid_file.write_text(str(process.pid))
-        self.run_shell("reject_old_prysm", success=False)
+        self.run_shell("reject_legacy_process lighthouse", success=False)
         # Reap in the parent while the stop loop waits for /proc to disappear.
         stop = subprocess.Popen(
             ["bash", str(SCRIPT), "stop"], env=self.env,
@@ -255,7 +253,7 @@ port_is_open() {
         self.run_shell("stop_all")
         self.assertFalse(pid_file.exists())
         pid_file.write_text("999999999")
-        self.run_shell("reject_old_prysm")
+        self.run_shell("reject_legacy_process lighthouse")
         self.assertFalse(pid_file.exists())
 
     def test_unrelated_command_text_is_not_a_client(self):
@@ -263,7 +261,7 @@ port_is_open() {
             ["bash", "-c", "sleep 60 & wait", f"{SCRIPT} run-cl"], start_new_session=True,
         )
         try:
-            self.run_shell(f"legacy_process_matches prysm {process.pid}", success=False)
+            self.run_shell(f"legacy_process_matches lighthouse {process.pid}", success=False)
         finally:
             os.killpg(process.pid, signal.SIGTERM)
             process.wait(timeout=5)
