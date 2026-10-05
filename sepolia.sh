@@ -37,7 +37,7 @@ AUTHRPC_PORT="${AUTHRPC_PORT:-8551}"
 ETHREX_P2P_PORT="${ETHREX_P2P_PORT:-30303}"
 ETHREX_DISCOVERY_PORT="${ETHREX_DISCOVERY_PORT:-30303}"
 ETHREX_SYNCMODE="${ETHREX_SYNCMODE:-snap}"
-ETHREX_HTTP_API="${ETHREX_HTTP_API:-eth,net,web3,debug}"
+ETHREX_HTTP_API="${ETHREX_HTTP_API:-eth,net,web3,debug,admin}"
 ETHREX_PRECOMPUTE_WITNESSES="${ETHREX_PRECOMPUTE_WITNESSES:-true}"
 
 LIGHTHOUSE_HTTP_ADDR="${LIGHTHOUSE_HTTP_ADDR:-127.0.0.1}"
@@ -85,7 +85,7 @@ Main environment overrides:
   LIGHTHOUSE_DATADIR         Lighthouse database directory (defaults to DATA_DIR/lighthouse)
   LIGHTHOUSE_HTTP_ADDR       Beacon API listen address (defaults to 127.0.0.1)
   LIGHTHOUSE_HTTP_PORT       Beacon API port (defaults to 5052)
-  ETHREX_HTTP_API            ethrex HTTP API modules (defaults to eth,net,web3,debug)
+  ETHREX_HTTP_API            ethrex HTTP API modules (defaults to eth,net,web3,debug,admin)
   ETHREX_PRECOMPUTE_WITNESSES
                            Enable ethrex witness precomputation (defaults to true)
   LIGHTHOUSE_P2P_LISTEN_ADDR  Lighthouse P2P listen address (defaults to 0.0.0.0)
