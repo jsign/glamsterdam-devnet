@@ -53,6 +53,21 @@ AUTHRPC_CONNECT_HOST="${AUTHRPC_CONNECT_HOST:-127.0.0.1}"
 AUTHRPC_WAIT_SECS="${AUTHRPC_WAIT_SECS:-60}"
 LIGHTHOUSE_WAIT_SECS="${LIGHTHOUSE_WAIT_SECS:-300}"
 
+SYSTEMD_UNIT_DIR="${SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
+
+# Settings passed to supervised clients, so they run with the launcher's view.
+SERVICE_ENV_NAMES=(
+  WORKDIR CHECKPOINT_SYNC_URL
+  SECRETS_DIR DATA_DIR LOG_DIR RUN_DIR SRC_DIR JWT_SECRET_PATH
+  ETHREX_GIT_URL LIGHTHOUSE_GIT_URL ETHREX_REF LIGHTHOUSE_REF ETHREX_SRC LIGHTHOUSE_SRC
+  ETHREX_BIN LIGHTHOUSE_BIN HTTP_ADDR HTTP_PORT AUTHRPC_ADDR AUTHRPC_PORT
+  ETHREX_P2P_PORT ETHREX_DISCOVERY_PORT ETHREX_SYNCMODE ETHREX_HTTP_API
+  ETHREX_PRECOMPUTE_WITNESSES LIGHTHOUSE_HTTP_ADDR LIGHTHOUSE_HTTP_PORT
+  LIGHTHOUSE_P2P_LISTEN_ADDR LIGHTHOUSE_P2P_TCP_PORT LIGHTHOUSE_P2P_UDP_PORT
+  LIGHTHOUSE_P2P_QUIC_PORT LIGHTHOUSE_DATADIR ETHREX_DATADIR AUTHRPC_CONNECT_HOST
+  AUTHRPC_WAIT_SECS LIGHTHOUSE_WAIT_SECS
+)
+
 usage() {
   local script_name
   script_name="$(basename -- "$0")"
@@ -68,6 +83,8 @@ Usage:
   ./$script_name status
   ./$script_name stop
   ./$script_name clean
+  ./$script_name install-units
+  ./$script_name uninstall-units
   ./$script_name paths
 
 Main environment overrides:
@@ -95,6 +112,7 @@ Main environment overrides:
   CHECKPOINT_SYNC_URL        Beacon checkpoint sync endpoint
   AUTHRPC_WAIT_SECS          Ethrex readiness timeout for run-all (defaults to 60)
   LIGHTHOUSE_WAIT_SECS       Lighthouse readiness timeout for run-all (defaults to 300)
+  SYSTEMD_UNIT_DIR           Where install-units writes system units (defaults to /etc/systemd/system)
 EOF
 }
 
@@ -298,13 +316,17 @@ supervisor_available() {
   command -v systemctl >/dev/null 2>&1 \
     && command -v systemd-run >/dev/null 2>&1 \
     && command -v systemd-escape >/dev/null 2>&1 \
-    && systemctl --user show-environment >/dev/null 2>&1
+    && { system_units_installed || systemctl --user show-environment >/dev/null 2>&1; }
 }
 
 require_supervisor() {
   require_cmd systemctl
   require_cmd systemd-run
   require_cmd systemd-escape
+  if system_units_installed; then
+    require_cmd sudo
+    return
+  fi
   systemctl --user show-environment >/dev/null 2>&1 \
     || die "could not connect to the systemd user manager"
 }
@@ -315,11 +337,35 @@ service_unit_name() {
   systemd-escape --mangle "${NETWORK_NAME}-${name}.service"
 }
 
+# Once install-units has written boot-enabled system units, they replace the
+# transient user units for every supervision command.
+system_units_installed() {
+  [[ -f "$SYSTEMD_UNIT_DIR/$(service_unit_name ethrex)" ]]
+}
+
+# systemctl against the manager that owns the client units. Queries need no
+# privileges; changes to system units go through sudo.
+sctl() {
+  if ! system_units_installed; then
+    systemctl --user "$@"
+    return
+  fi
+
+  case "$1" in
+    show|is-active|status)
+      systemctl "$@"
+      ;;
+    *)
+      sudo systemctl "$@"
+      ;;
+  esac
+}
+
 unit_load_state() {
   local unit="$1"
   local state
 
-  state="$(systemctl --user show "$unit" --property=LoadState --value 2>/dev/null || true)"
+  state="$(sctl show "$unit" --property=LoadState --value 2>/dev/null || true)"
   printf '%s\n' "${state:-not-found}"
 }
 
@@ -327,7 +373,7 @@ unit_active_state() {
   local unit="$1"
   local state
 
-  state="$(systemctl --user show "$unit" --property=ActiveState --value 2>/dev/null || true)"
+  state="$(sctl show "$unit" --property=ActiveState --value 2>/dev/null || true)"
   printf '%s\n' "${state:-not-found}"
 }
 
@@ -342,6 +388,12 @@ prepare_unit_start() {
       die "systemd unit $unit is already $state; run '$SCRIPT_PATH stop' first"
       ;;
   esac
+
+  # Installed units stay loaded while stopped; only clear a failed state.
+  if system_units_installed; then
+    sctl reset-failed "$unit" >/dev/null 2>&1 || true
+    return
+  fi
 
   if [[ "$(unit_load_state "$unit")" == "not-found" ]]; then
     return
@@ -470,6 +522,73 @@ append_service_log_marker() {
     "$(date --iso-8601=seconds)" "$name" "$unit" >> "$log_file"
 }
 
+# Unit file values expand %-specifiers; double them to keep them literal.
+systemd_escape_specifiers() {
+  printf '%s\n' "${1//%/%%}"
+}
+
+# One double-quoted unit file word, with backslashes, quotes and specifiers escaped.
+systemd_quote() {
+  local value="$1"
+
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//%/%%}"
+  printf '"%s"\n' "$value"
+}
+
+write_system_unit() {
+  local name="$1"
+  local subcommand="$2"
+  local log_file="$3"
+  local unit="$4"
+  local deps="network-online.target"
+  local exec_path
+  local env_name
+  local tmp
+
+  # Lighthouse needs the Engine API, so start it after ethrex.
+  [[ "$name" == "lighthouse" ]] && deps+=" $(service_unit_name ethrex)"
+  exec_path="$(systemd_quote "$SCRIPT_PATH")"
+  # ExecStart expands $VAR references, so keep dollar signs literal.
+  exec_path="${exec_path//\$/\$\$}"
+  log_file="$(systemd_escape_specifiers "$log_file")"
+
+  tmp="$(mktemp)"
+  {
+    printf '[Unit]\n'
+    printf 'Description=%s %s client\n' "$NETWORK_NAME" "$name"
+    printf 'Wants=%s\n' "$deps"
+    printf 'After=%s\n' "$deps"
+    printf 'StartLimitBurst=5\n'
+    printf 'StartLimitIntervalSec=5min\n'
+    printf '\n[Service]\n'
+    printf 'Type=exec\n'
+    printf 'User=%s\n' "$(id -un)"
+    printf 'Group=%s\n' "$(id -gn)"
+    printf 'WorkingDirectory=%s\n' "$(systemd_escape_specifiers "$LAUNCH_DIR")"
+    for env_name in "${SERVICE_ENV_NAMES[@]}"; do
+      printf 'Environment=%s\n' "$(systemd_quote "${env_name}=${!env_name}")"
+    done
+    printf 'ExecStart=%s %s\n' "$exec_path" "$subcommand"
+    printf 'Restart=on-failure\n'
+    printf 'RestartSec=10s\n'
+    # Give ethrex time to flush its database when the host shuts down.
+    printf 'TimeoutStopSec=300\n'
+    printf 'OOMPolicy=continue\n'
+    printf 'StandardOutput=append:%s\n' "$log_file"
+    printf 'StandardError=append:%s\n' "$log_file"
+    printf '\n[Install]\n'
+    printf 'WantedBy=multi-user.target\n'
+  } > "$tmp"
+
+  if ! sudo install -m 0644 "$tmp" "$SYSTEMD_UNIT_DIR/$unit"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+}
+
 start_supervised_service() {
   local name="$1"
   local subcommand="$2"
@@ -477,20 +596,18 @@ start_supervised_service() {
   local unit="$4"
   local env_name
   local -a systemd_args
-  local -a env_names=(
-    WORKDIR CHECKPOINT_SYNC_URL
-    SECRETS_DIR DATA_DIR LOG_DIR RUN_DIR SRC_DIR JWT_SECRET_PATH
-    ETHREX_GIT_URL LIGHTHOUSE_GIT_URL ETHREX_REF LIGHTHOUSE_REF ETHREX_SRC LIGHTHOUSE_SRC
-    ETHREX_BIN LIGHTHOUSE_BIN HTTP_ADDR HTTP_PORT AUTHRPC_ADDR AUTHRPC_PORT
-    ETHREX_P2P_PORT ETHREX_DISCOVERY_PORT ETHREX_SYNCMODE ETHREX_HTTP_API
-    ETHREX_PRECOMPUTE_WITNESSES LIGHTHOUSE_HTTP_ADDR LIGHTHOUSE_HTTP_PORT
-    LIGHTHOUSE_P2P_LISTEN_ADDR LIGHTHOUSE_P2P_TCP_PORT LIGHTHOUSE_P2P_UDP_PORT
-    LIGHTHOUSE_P2P_QUIC_PORT LIGHTHOUSE_DATADIR ETHREX_DATADIR AUTHRPC_CONNECT_HOST
-    AUTHRPC_WAIT_SECS LIGHTHOUSE_WAIT_SECS
-  )
 
   log_file="$(absolute_log_path "$log_file")"
   append_service_log_marker "$name" "$unit" "$log_file"
+
+  if system_units_installed; then
+    # Rewrite the unit so this run's settings apply, as with transient units.
+    write_system_unit "$name" "$subcommand" "$log_file" "$unit" || return 1
+    sudo systemctl daemon-reload || return 1
+    log "info" "starting $name as systemd system unit $unit"
+    sudo systemctl start "$unit"
+    return
+  fi
 
   systemd_args=(
     systemd-run
@@ -509,7 +626,7 @@ start_supervised_service() {
     --property="StandardOutput=append:$log_file"
     --property="StandardError=append:$log_file"
   )
-  for env_name in "${env_names[@]}"; do
+  for env_name in "${SERVICE_ENV_NAMES[@]}"; do
     systemd_args+=("--setenv=${env_name}=${!env_name}")
   done
   systemd_args+=(-- "$SCRIPT_PATH" "$subcommand")
@@ -527,7 +644,7 @@ wait_for_service_port() {
   local state
 
   while (( waited < timeout_secs )); do
-    if systemctl --user is-active --quiet "$unit" && port_is_open "$host" "$port"; then
+    if sctl is-active --quiet "$unit" && port_is_open "$host" "$port"; then
       return
     fi
 
@@ -551,11 +668,11 @@ stop_systemd_one() {
   fi
 
   log "info" "stopping $name systemd unit $unit"
-  if ! systemctl --user stop "$unit"; then
+  if ! sctl stop "$unit"; then
     log "error" "failed to stop $name systemd unit $unit"
     return 1
   fi
-  systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+  sctl reset-failed "$unit" >/dev/null 2>&1 || true
 }
 
 stop_all() {
@@ -592,13 +709,14 @@ lighthouse_connect_host() {
 print_failed_unit() {
   local unit="$1"
 
-  systemctl --user status "$unit" --no-pager >&2 || true
+  sctl status "$unit" --no-pager >&2 || true
 }
 
 run_all() {
   local ethrex_unit
   local lighthouse_unit
   local lighthouse_host
+  local kind="transient systemd user services"
 
   ensure_layout
   require_supervisor
@@ -641,8 +759,9 @@ run_all() {
     die "failed to start $NETWORK_NAME lighthouse service"
   fi
 
+  system_units_installed && kind="boot-enabled systemd system services"
   cat <<EOF
-Started $NETWORK_NAME as supervised systemd user services.
+Started $NETWORK_NAME as $kind.
 
 Ethrex unit:     $ethrex_unit
 Lighthouse unit: $lighthouse_unit
@@ -670,7 +789,7 @@ status_one() {
     return 1
   fi
 
-  systemctl --user show "$unit" --no-pager \
+  sctl show "$unit" --no-pager \
     --property=LoadState \
     --property=ActiveState \
     --property=SubState \
@@ -679,7 +798,7 @@ status_one() {
     --property=Result \
     --property=MemoryCurrent
 
-  if systemctl --user is-active --quiet "$unit" && port_is_open "$host" "$port"; then
+  if sctl is-active --quiet "$unit" && port_is_open "$host" "$port"; then
     printf 'ReadyPort=%s:%s open\n' "$host" "$port"
   else
     printf 'ReadyPort=%s:%s closed\n' "$host" "$port"
@@ -703,6 +822,70 @@ status_all() {
   printf '\n'
   status_one "lighthouse" "$lighthouse_unit" "$lighthouse_host" "$LIGHTHOUSE_HTTP_PORT" || failed=1
   return "$failed"
+}
+
+install_units() {
+  local ethrex_unit
+  local lighthouse_unit
+  local unit
+
+  require_cmd systemctl
+  require_cmd systemd-escape
+  require_cmd sudo
+  ethrex_unit="$(service_unit_name ethrex)"
+  lighthouse_unit="$(service_unit_name lighthouse)"
+
+  # Running transient copies would fight the system units for the same ports.
+  if ! system_units_installed && systemctl --user show-environment >/dev/null 2>&1; then
+    for unit in "$ethrex_unit" "$lighthouse_unit"; do
+      case "$(unit_active_state "$unit")" in
+        active|activating|deactivating|reloading)
+          die "transient unit $unit is running; run '$SCRIPT_PATH stop' first"
+          ;;
+      esac
+    done
+  fi
+
+  setup
+  detect_ethrex_bin >/dev/null
+  detect_lighthouse_bin >/dev/null
+
+  write_system_unit "ethrex" "service-el" "$(absolute_log_path "$LOG_DIR/ethrex.log")" "$ethrex_unit" \
+    || die "failed to write $SYSTEMD_UNIT_DIR/$ethrex_unit"
+  write_system_unit "lighthouse" "service-cl" "$(absolute_log_path "$LOG_DIR/lighthouse.log")" "$lighthouse_unit" \
+    || die "failed to write $SYSTEMD_UNIT_DIR/$lighthouse_unit"
+  sudo systemctl daemon-reload || die "systemctl daemon-reload failed"
+  sudo systemctl enable "$ethrex_unit" "$lighthouse_unit" \
+    || die "failed to enable $ethrex_unit and $lighthouse_unit"
+
+  cat <<EOF
+Installed boot-enabled system units in $SYSTEMD_UNIT_DIR:
+  $ethrex_unit
+  $lighthouse_unit
+
+From now on run-all, status, stop and clean manage these units. Start them now with:
+  $SCRIPT_PATH run-all
+EOF
+}
+
+uninstall_units() {
+  local unit
+
+  require_cmd systemctl
+  require_cmd systemd-escape
+  require_cmd sudo
+
+  if ! system_units_installed; then
+    log "info" "no system units installed in $SYSTEMD_UNIT_DIR"
+    return
+  fi
+
+  for unit in "$(service_unit_name lighthouse)" "$(service_unit_name ethrex)"; do
+    sudo systemctl disable --now "$unit" || die "failed to stop and disable $unit"
+    sudo rm -f "$SYSTEMD_UNIT_DIR/$unit"
+  done
+  sudo systemctl daemon-reload || die "systemctl daemon-reload failed"
+  log "info" "removed system units; run-all starts transient user units again"
 }
 
 clean() {
@@ -785,6 +968,14 @@ main() {
     clean)
       expect_no_args "$cmd" "$@"
       clean
+      ;;
+    install-units)
+      expect_no_args "$cmd" "$@"
+      install_units
+      ;;
+    uninstall-units)
+      expect_no_args "$cmd" "$@"
+      uninstall_units
       ;;
     paths)
       expect_no_args "$cmd" "$@"

@@ -57,8 +57,10 @@ sync; Ethrex uses snap sync by default.
 Each service restarts independently after a failure, including an OOM kill.
 Restarts wait 10 seconds and stop after five failed starts within five minutes.
 
-The services survive an SSH or tmux disconnection, but they are transient and
-are not enabled across VM reboots. Run `run-all` again after a reboot.
+By default the services are transient: they stop when you log out (unless
+`loginctl enable-linger` is set for your user), and they do not come back after
+a reboot. To keep them running across logouts and reboots, install them as
+system units; see [Start on boot](#start-on-boot).
 
 ## Manage services
 
@@ -91,6 +93,38 @@ journalctl --user -u sepolia-lighthouse.service
 
 Supervision recovers the clients after memory exhaustion, but it does not lower
 their memory use. No memory ceiling or swap is configured by this launcher.
+
+## Start on boot
+
+On a dedicated host, install the clients as boot-enabled systemd system units.
+This needs `sudo`. Stop any transient services first, then install with the
+same settings you pass to `run-all`:
+
+```bash
+DATA_DIR=/fast/sepolia ./sepolia.sh stop
+DATA_DIR=/fast/sepolia ./sepolia.sh install-units
+DATA_DIR=/fast/sepolia ./sepolia.sh run-all
+```
+
+`install-units` writes `sepolia-ethrex.service` and `sepolia-lighthouse.service`
+to `/etc/systemd/system` and enables them. The units run as the installing user,
+start Lighthouse after Ethrex, and give Ethrex five minutes to shut down cleanly.
+
+Once the units exist, `run-all`, `status`, `stop`, and `clean` manage them
+instead of transient units. `run-all` rewrites the unit files first, so new
+settings and defaults take effect, just as with transient units. `stop` does not
+disable boot start. Lifecycle events go to the system journal:
+
+```bash
+journalctl -u sepolia-ethrex.service
+journalctl -u sepolia-lighthouse.service
+```
+
+To return to transient units, stop and remove the system units:
+
+```bash
+./sepolia.sh uninstall-units
+```
 
 ## Start fresh
 
@@ -155,6 +189,7 @@ Available environment overrides:
 - `CHECKPOINT_SYNC_URL`: beacon checkpoint sync endpoint (`https://checkpoint-sync.sepolia.ethpandaops.io` by default)
 - `AUTHRPC_WAIT_SECS`: seconds to wait for Ethrex readiness during `run-all` (60 by default)
 - `LIGHTHOUSE_WAIT_SECS`: seconds to wait for Lighthouse readiness during `run-all` (300 by default)
+- `SYSTEMD_UNIT_DIR`: where `install-units` writes the system units (`/etc/systemd/system` by default)
 - `SRC_DIR`: change the default source checkout root from `./src`
 - `WORKDIR`: move secrets, data, logs and source clones elsewhere
 

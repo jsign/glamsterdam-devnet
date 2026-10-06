@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import pwd
 import shutil
 import signal
 import subprocess
@@ -31,23 +32,34 @@ elif name == "systemd-run":
         sys.exit(1)
     state[unit] = "active"
 elif name == "systemctl":
-    command = args[1]
+    # Without --user the call targets the system manager, where installed
+    # unit files stay loaded while stopped.
+    system = "--user" not in args
+    command = [a for a in args if a != "--user"][0]
     unit = next((a for a in args if a.endswith(".service")), "")
+    installed = system and unit and (pathlib.Path(os.environ["SYSTEMD_UNIT_DIR"]) / unit).exists()
     if command == "show":
         if "--property=LoadState" in args and "--value" in args:
-            print("loaded" if unit in state else "not-found")
+            print("loaded" if unit in state or installed else "not-found")
         elif "--property=ActiveState" in args and "--value" in args:
             print(state.get(unit, "inactive"))
         else:
             print("ActiveState=" + state.get(unit, "inactive"))
     elif command == "is-active":
         sys.exit(0 if state.get(unit) == "active" else 1)
-    elif command == "stop":
+    elif command == "start":
+        if os.environ.get("FAIL_START", "!") in unit:
+            sys.exit(1)
+        state[unit] = "active"
+    elif command in ("stop", "disable"):
         if os.environ.get("FAIL_STOP", "!") in unit:
             sys.exit(1)
         state.pop(unit, None)
 state_file.write_text(json.dumps(state))
 '''
+
+# Runs the command unprivileged so tests can inspect what it would do as root.
+SUDO_STUB = '#!/usr/bin/env bash\nexec "$@"\n'
 
 
 class LauncherTests(unittest.TestCase):
@@ -60,12 +72,16 @@ class LauncherTests(unittest.TestCase):
         self.bin.mkdir()
         for name in ("systemctl", "systemd-run", "systemd-escape", "cargo", "git"):
             self.executable(self.bin / name, STUB)
+        self.executable(self.bin / "sudo", SUDO_STUB)
+        self.unit_dir = self.root / "system units"
+        self.unit_dir.mkdir()
         # Avoid inherited overrides pointing tests at a real installation.
         self.env = {
             "PATH": f"{self.bin}:/usr/bin:/bin",
             "HOME": str(self.root),
             "WORKDIR": str(self.work),
             "TEST_ROOT": str(self.root),
+            "SYSTEMD_UNIT_DIR": str(self.unit_dir),
         }
 
     def executable(self, path, body=STUB):
@@ -153,7 +169,7 @@ port_is_open() {
         self.run_shell("clone_all")
         calls = self.calls("git")
         self.assertIn(["clone", "https://github.com/sigp/lighthouse.git", str(self.work / "src/lighthouse")], [c[1] for c in calls])
-        self.assertIn(["-C", str(self.work / "src/ethrex"), "checkout", "v29.0.0"], [c[1] for c in calls])
+        self.assertIn(["-C", str(self.work / "src/ethrex"), "checkout", "v29.0.1"], [c[1] for c in calls])
         self.assertIn(["-C", str(self.work / "src/lighthouse"), "checkout", "v8.3.0-rc.0"], [c[1] for c in calls])
         self.fake_clients()
         self.run_shell("build_all")
@@ -272,6 +288,64 @@ port_is_open() {
         self.supervised("status_all", success=False)
         self.set_units(ethrex="active", lighthouse="active")
         self.supervised("status_all", success=False, FAIL_READY="lighthouse")
+
+    def system_calls(self):
+        return [c[1] for c in self.calls("systemctl") if "--user" not in c[1]]
+
+    def test_install_units_writes_boot_enabled_units(self):
+        self.fake_clients()
+        data = self.root / "chain data"
+        self.run_shell("install_units", DATA_DIR=str(data), CHECKPOINT_SYNC_URL='https://cp.example/a%20"b')
+        ethrex = (self.unit_dir / "sepolia-ethrex.service").read_text().splitlines()
+        lighthouse = (self.unit_dir / "sepolia-lighthouse.service").read_text().splitlines()
+        for expected in (
+            "After=network-online.target",
+            f"User={pwd.getpwuid(os.getuid()).pw_name}",
+            f'ExecStart="{SCRIPT}" service-el',
+            f'Environment="DATA_DIR={data}"',
+            # Specifiers and quotes stay literal.
+            'Environment="CHECKPOINT_SYNC_URL=https://cp.example/a%%20\\"b"',
+            "Restart=on-failure",
+            "TimeoutStopSec=300",
+            f"StandardOutput=append:{self.work}/logs/ethrex.log",
+            "WantedBy=multi-user.target",
+        ):
+            self.assertIn(expected, ethrex)
+        self.assertIn("After=network-online.target sepolia-ethrex.service", lighthouse)
+        self.assertIn(f'ExecStart="{SCRIPT}" service-cl', lighthouse)
+        self.assertEqual(self.system_calls(), [
+            ["daemon-reload"],
+            ["enable", "sepolia-ethrex.service", "sepolia-lighthouse.service"],
+        ])
+
+    def test_installed_units_drive_run_status_and_stop(self):
+        self.fake_clients()
+        self.run_shell("install_units")
+        self.supervised("run_all; status_all; stop_all", LIGHTHOUSE_WAIT_SECS="1")
+        self.assertEqual(self.calls("systemd-run"), [])
+        calls = self.system_calls()
+        for expected in (
+            ["start", "sepolia-ethrex.service"], ["start", "sepolia-lighthouse.service"],
+            ["stop", "sepolia-lighthouse.service"], ["stop", "sepolia-ethrex.service"],
+        ):
+            self.assertIn(expected, calls)
+        self.assertEqual(json.loads((self.root / "units.json").read_text()), {})
+
+    def test_install_units_refuses_while_transient_units_run(self):
+        self.fake_clients()
+        self.set_units(ethrex="active")
+        result = self.run_shell("install_units", success=False)
+        self.assertIn("transient unit sepolia-ethrex.service is running", result.stderr)
+        self.assertEqual(list(self.unit_dir.iterdir()), [])
+
+    def test_uninstall_units_restores_transient_units(self):
+        self.fake_clients()
+        self.run_shell("install_units")
+        self.run_shell("uninstall_units")
+        self.assertEqual(list(self.unit_dir.iterdir()), [])
+        self.assertIn(["disable", "--now", "sepolia-ethrex.service"], self.system_calls())
+        self.supervised("run_all", LIGHTHOUSE_WAIT_SECS="1")
+        self.assertEqual(len(self.calls("systemd-run")), 2)
 
 
 if __name__ == "__main__":
